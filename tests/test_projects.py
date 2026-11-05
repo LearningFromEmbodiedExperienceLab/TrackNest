@@ -119,7 +119,10 @@ def test_project_deletion_and_account_cleanup(users, project):
     post(owner, f"/projects/{project.id}/members", username="bob", role="viewer")
     admin = app.test_client()
     login(admin, "admin")
-    assert post(admin, f"/delete/{users['alice'].id}").status_code == 400
+    response = post(admin, f"/delete/{users['alice'].id}")
+    assert response.status_code == 302 and response.location == "/admin/users"
+    assert db.session.get(type(users["alice"]), users["alice"].id) is not None
+    assert db.session.get(SharedProject, project.id) is not None
     assert post(admin, f"/delete/{users['bob'].id}").status_code == 302
     assert ProjectMember.query.filter_by(user_id=users["bob"].id).count() == 0
     project_id, directory = project.id, project.data_dir
@@ -265,3 +268,68 @@ def test_project_data_migration_does_not_overwrite_existing_directory(users, pro
     assert project.data_dir == str(legacy)
     assert (legacy / "original.txt").read_text() == "original"
     assert (destination / "existing.txt").read_text() == "existing"
+
+
+def test_admin_deletes_owned_projects_only_after_all_confirmations(users, project):
+    from pathlib import Path
+    from app import TrackioUser
+
+    owner = owner_client()
+    for name in ("bbb", "ccc"):
+        post(owner, "/projects", name=name)
+    projects = SharedProject.query.filter_by(owner_id=users["alice"].id).order_by(SharedProject.name).all()
+    bob = app.test_client()
+    login(bob, "bob")
+    post(bob, "/projects", name="unrelated")
+    other = SharedProject.query.filter_by(owner_id=users["bob"].id).one()
+    post(bob, f"/projects/{other.id}/members", username="alice", role="editor")
+    post(owner, f"/projects/{project.id}/members", username="bob", role="viewer")
+    for item in projects:
+        directory = Path(item.data_dir)
+        directory.mkdir(parents=True)
+        (directory / "retained.txt").write_text("experiment data")
+    admin = app.test_client()
+    login(admin, "admin")
+    page = admin.get("/admin/users")
+    assert all(item.name in page.text for item in projects)
+    assert "admin_users.js" in page.text
+    for confirmed in ([], [projects[0].id], [item.id for item in projects] + [other.id]):
+        with patch("app.stop_trackio") as stop:
+            response = post(admin, f"/delete/{users['alice'].id}", confirmed_project_ids=confirmed)
+            assert response.status_code == 302
+            stop.assert_not_called()
+        assert SharedProject.query.filter_by(owner_id=users["alice"].id).count() == 3
+        assert "请逐一确认" in admin.get(response.location).text
+    uid = users["alice"].id
+    with patch("app.stop_trackio") as stop:
+        response = post(admin, f"/delete/{uid}", confirmed_project_ids=[item.id for item in projects])
+        assert response.status_code == 302
+        assert {call.args[0] for call in stop.call_args_list} == {*projects, users["alice"]}
+    assert db.session.get(TrackioUser, uid) is None
+    assert SharedProject.query.filter_by(owner_id=uid).count() == 0
+    assert ProjectMember.query.filter_by(user_id=uid).count() == 0
+    assert ProjectMember.query.filter_by(project_id=project.id).count() == 0
+    assert db.session.get(SharedProject, other.id) is not None
+    assert all((Path(item.data_dir) / "retained.txt").read_text() == "experiment data" for item in projects)
+
+
+def test_account_project_deletion_requires_admin_and_csrf(users, project):
+    from app import TrackioUser
+
+    owner = owner_client()
+    url = f"/delete/{users['alice'].id}"
+    assert post(owner, url, confirmed_project_ids=[project.id]).status_code == 403
+    admin = app.test_client()
+    login(admin, "admin")
+    assert admin.post(url, data={"confirmed_project_ids": [project.id]}).status_code == 400
+    assert post(admin, f"/delete/{users['admin'].id}", confirmed_project_ids=[project.id]).status_code == 400
+    assert db.session.get(TrackioUser, users["alice"].id) is not None
+    assert db.session.get(SharedProject, project.id) is not None
+    admin.set_cookie("trackio_manager_language", "en")
+    page = post(admin, "/add", username="pending")
+    assert page.status_code == 200
+    assert 'id="copy-invitation"' in page.text
+    page = admin.get("/admin/users")
+    assert "admin_users.js" in page.text and project.name in page.text
+    assert "This user owns these team projects" in page.text
+    assert project.write_token not in page.text

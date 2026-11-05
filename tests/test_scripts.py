@@ -1,5 +1,6 @@
 """Exercise lifecycle scripts on temporary data and unused ports."""
 import os
+from pathlib import Path
 import shutil
 import socket
 import sqlite3
@@ -29,7 +30,7 @@ def test_script_lifecycle_and_pid_safety(tmp_path):
     gateway = ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
     public_port = gateway.server_port
     threading.Thread(target=gateway.serve_forever, daemon=True).start()
-    for name in ("app.py", "trackio_server.py"):
+    for name in ("app.py", "trackio_server.py", "data_transfer.py", "storage_config.py", "script_output.py"):
         shutil.copy(BASE_DIR / name, root / name)
     for name in (".venv", "templates", "static"):
         (root / name).symlink_to(BASE_DIR / name, target_is_directory=True)
@@ -48,19 +49,29 @@ def test_script_lifecycle_and_pid_safety(tmp_path):
     def python(code):
         return subprocess.run([sys.executable, "-c", code], cwd=root, env=env, capture_output=True, text=True, timeout=80)
 
-    def run(name):
+    def run(name, deployment=root, config=env, args=()):
         # The caller need not be in the application directory.
-        return subprocess.run([str(root / name)], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
+        return subprocess.run([str(deployment / name), *args], cwd=tmp_path, env=config, capture_output=True, text=True, timeout=60)
 
     unrelated = None
     manager_pid = None
+    relocated = None
+    relocated_env = None
     try:
-        assert run("start.sh").returncode != 0  # Initialization is required.
+        assert run("start.sh", args=("--help",)).returncode == 0
+        assert not (root / ".storage.json").exists()
+        initial = run("start.sh", args=("--lang", "zh"))
+        assert initial.returncode != 0 and "请先按 README 初始化数据库" in initial.stderr
+        for script in ("start.sh", "stop.sh", "status.sh"):
+            help_result = run(script, args=("--lang", "zh", "--help"))
+            assert help_result.returncode == 0 and "输出语言" in help_result.stdout
         result = python("from app import app, init_db;\nwith app.app_context(): init_db()")
         assert result.returncode == 0, result.stderr
         assert run("status.sh").returncode == 1
         result = run("start.sh")
         assert result.returncode == 0, result.stdout + result.stderr
+        assert "Management service started:" in result.stdout
+        assert "\x1b[" not in result.stdout + result.stderr
         pid_file = root / "state/gunicorn.pid"
         manager_pid = int(pid_file.read_text())
         assert run("status.sh").returncode == 0
@@ -85,8 +96,8 @@ with app.app_context():
         assert result.returncode == 0, result.stdout + result.stderr
         status = run("status.sh")
         assert status.returncode == 0, status.stdout + status.stderr
-        assert "用户 alice：运行中" in status.stdout
-        assert "项目 alice/test-project：运行中" in status.stdout
+        assert "User alice: running" in status.stdout
+        assert "Project alice/test-project: running" in status.stdout
 
         with sqlite3.connect(root / "state/manager.db") as conn:
             user_pid = conn.execute("SELECT pid FROM trackio_user WHERE username='alice'").fetchone()[0]
@@ -99,18 +110,19 @@ with app.app_context():
 
         pid_file.unlink()
         refused = run("stop.sh")
-        assert refused.returncode != 0 and "端口仍被占用" in refused.stdout + refused.stderr
+        assert refused.returncode != 0 and "is still in use" in refused.stdout + refused.stderr
         pid_file.write_text(str(manager_pid))
 
         unrelated = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
         pid_file.write_text(str(unrelated.pid))
         refused = run("stop.sh")
-        assert refused.returncode != 0 and "拒绝停止" in refused.stdout + refused.stderr
+        assert refused.returncode != 0 and "refusing to stop" in refused.stdout + refused.stderr
         assert unrelated.poll() is None
         pid_file.write_text(str(manager_pid))
 
-        stopped = run("stop.sh")
+        stopped = run("stop.sh", args=("--lang", "zh"))
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+        assert "全部实验实例已停止" in stopped.stdout
         assert not pid_file.exists()
         assert run("stop.sh").returncode == 0
         assert run("status.sh").returncode == 1
@@ -118,14 +130,56 @@ with app.app_context():
         assert len(retained) == 2 and all(path.read_text() == "experiment data" for path in retained)
         assert run("start.sh").returncode == 0
         manager_pid = int(pid_file.read_text())
-        status = run("status.sh")
+        status = run("status.sh", args=("--lang", "zh"))
         assert status.returncode == 0
         assert "用户 alice：已停止" in status.stdout
         assert "项目 alice/test-project：已停止" in status.stdout
+        assert run("stop.sh").returncode == 0
+        relocated = tmp_path / "copied deployment"
+        shutil.copytree(root, relocated, symlinks=True)
+        relocated_env = {
+            **env, "MANAGER_STATE_DIR": str(relocated / "state"),
+            "MANAGER_DATA_ROOT": str(relocated / "experiments"),
+        }
+        (relocated / "state/gunicorn.pid").write_text(str(unrelated.pid))
+        result = run("start.sh", relocated, relocated_env)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert unrelated.poll() is None
+        assert run("status.sh", relocated, relocated_env).returncode == 0
+        assert (root / "state/secret.key").read_bytes() == (relocated / "state/secret.key").read_bytes()
+        with sqlite3.connect(relocated / "state/manager.db") as conn:
+            directories = conn.execute("SELECT data_dir FROM trackio_user UNION ALL SELECT data_dir FROM shared_project").fetchall()
+        assert all(Path(row[0]).is_relative_to(relocated / "experiments") for row in directories)
+        assert len(list((relocated / "experiments").rglob("retained.txt"))) == 2
+        saved = (relocated / ".storage.json").read_bytes()
+        assert run("start.sh", relocated, relocated_env, ("--storage-dir", str(tmp_path / "unused"))).returncode != 0
+        assert (relocated / ".storage.json").read_bytes() == saved
+        assert run("stop.sh", relocated, relocated_env).returncode == 0
+        selected = tmp_path / "selected storage"
+        selected.mkdir()
+        shutil.copytree(relocated / "state", selected / "instance")
+        shutil.copytree(relocated / "experiments", selected / "data")
+        relocated_env = {key: value for key, value in env.items() if key not in ("MANAGER_STATE_DIR", "MANAGER_DATA_ROOT")}
+        started = run("start.sh", relocated, relocated_env, ("--storage-dir", str(selected)))
+        assert started.returncode == 0, started.stdout + started.stderr
+        status = run("status.sh", relocated, relocated_env)
+        assert status.returncode == 0 and str(selected / "data") in status.stdout
+        configured = subprocess.run([sys.executable, "-c", "from app import STATE_DIR, DATA_ROOT; print(STATE_DIR); print(DATA_ROOT)"],
+                                    cwd=relocated, env=relocated_env, capture_output=True, text=True, timeout=10)
+        assert configured.returncode == 0 and str(selected / "instance") in configured.stdout
+        assert str(selected / "data") in configured.stdout
+        assert len(list((selected / "data").rglob("retained.txt"))) == 2
         gateway.shutdown()
         gateway.server_close()
-        assert run("status.sh").returncode == 1
+        assert run("status.sh", relocated, relocated_env).returncode == 1
+        assert run("stop.sh", relocated, relocated_env).returncode == 0
+        default_start = run("start.sh", relocated, relocated_env)
+        assert default_start.returncode != 0  # No database in the project's default instance/.
+        assert f"Management data directory: {relocated / 'instance'}" in default_start.stdout
+        assert len(list((selected / "data").rglob("retained.txt"))) == 2
     finally:
+        if relocated is not None and relocated_env is not None:
+            run("stop.sh", relocated, relocated_env)
         if manager_pid:
             (root / "state/gunicorn.pid").write_text(str(manager_pid))
         run("stop.sh")

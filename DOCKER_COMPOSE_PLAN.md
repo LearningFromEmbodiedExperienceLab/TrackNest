@@ -8,7 +8,7 @@
 
 本方案按以下前提设计：单台 Linux 服务器、一个管理应用副本、SQLite 和实验文件存放在本机持久化目录，只对外提供 9000 入口。继续保留每位用户的 Panel、管理员邀请注册、项目邀请和成员退出功能。
 
-上一轮在宿主机环境中运行了完整测试，结果为 **54 passed**，包括真实 Nginx 代理和启停脚本测试。这是现有功能的回归基线，**尚未构建或验证 Docker 镜像**。本次仅检查源码和配置，没有重新运行测试。
+宿主机环境的完整测试已通过 **79 项**，包括真实 Nginx 代理、存储路径选择、启停脚本、整套部署拷贝和单用户导入导出。这是现有功能的回归基线，**尚未构建或验证 Docker 镜像**；本文的 Docker 部署操作仍未执行。
 
 目前仓库没有 Dockerfile 或 Compose 配置，因此还不能直接执行 `docker compose up` 部署。
 
@@ -40,7 +40,7 @@
 
 | 项目 | 当前情况 | 建议处理 |
 | --- | --- | --- |
-| 应用镜像 | 依赖本机 `.venv` | 新增 Dockerfile，固定已验证的 Python 基础镜像，安装 `requirements.txt`，包含 `app.py`、`trackio_server.py`、`templates/` 和 `static/` |
+| 应用镜像 | 依赖本机 `.venv` | 新增 Dockerfile，固定已验证的 Python 基础镜像，安装 `requirements.txt`，包含 `app.py`、`storage_config.py`、`script_output.py`、`data_transfer.py`、`trackio_server.py`、`templates/` 和 `static/` |
 | 构建上下文 | `.gitignore` 不能代替 Docker 构建排除规则 | 新增 `.dockerignore`，排除 `.venv`、实验、管理数据库、备份、凭据和运行日志；保留 `templates/ui/` |
 | Gunicorn | `start.sh` 使用 `--daemon` 和 PID 文件 | 容器内以前台模式运行，保持 `--workers 1 --threads 4 --timeout 60`，绑定 `0.0.0.0:9001` |
 | Nginx 上游 | `127.0.0.1:9001` | 新增容器专用配置，改为 `manager:9001`，保留 Host、限流、上传大小及代理超时配置 |
@@ -65,18 +65,18 @@ MANAGER_DATA_ROOT=/storage/data
 
 新项目仍保存为 `/storage/data/<创建者>/projects/<项目ID>/`，协作者访问同一份数据。数据不能只写入容器可写层，否则重建容器时无法保留。[Docker 持久化存储说明](https://docs.docker.com/engine/storage/)
 
-### 当前部署迁移：优先保留绝对路径
+### 当前部署迁移：适配容器内路径
 
-现有管理数据库的 `TrackioUser.data_dir`、`SharedProject.data_dir` 保存了绝对路径；Trackio 文件记录和旧目录的兼容符号链接也可能包含绝对路径。**仅修改环境变量不会自动更新这些内容。**
+现有管理数据库的 `TrackioUser.data_dir`、`SharedProject.data_dir` 保存了绝对路径。项目现已提供 `relocate-data`：在数据拷贝完成、实验实例停止后，将这些路径适配到当前 `MANAGER_DATA_ROOT`，修复内部兼容链接并清理失效 PID。宿主机 `start.sh` 会自动执行适配；未来的容器入口应显式调用此命令，再前台启动 Gunicorn。
 
-首次迁移建议将当前目录按相同绝对路径挂入容器：
+因此，可以将当前数据目录挂入统一的容器路径：
 
 | 宿主机路径 | 容器路径 | 用途 |
 | --- | --- | --- |
-| `/home/syw/trackio_manager/instance` | `/home/syw/trackio_manager/instance` | 管理数据库和签名密钥 |
-| `/home/syw/trackio_manager/data` | `/home/syw/trackio_manager/data` | 实验数据库、媒体、日志和兼容链接 |
+| `<path-to>/trackio_manager/instance` | `/storage/instance` | 管理数据库和签名密钥 |
+| `<path-to>/trackio_manager/data` | `/storage/data` | 实验数据库、媒体、日志和兼容链接 |
 
-对应环境变量也使用上述绝对路径。这样无需同时改写历史数据路径。此方案对宿主机目录结构有依赖，但首次迁移的改动较小；以后若需要统一成 `/storage/...`，应另做路径迁移和文件访问测试。[Docker bind mount 说明](https://docs.docker.com/engine/storage/bind-mounts/)
+环境变量使用容器内路径。须先在完整数据副本上验证适配、曲线、媒体和文件访问，再切换正式数据；不要让宿主机原服务和容器同时操作同一份目录。bind mount 的宿主机目录与容器目录可以不同。[Docker bind mount 说明](https://docs.docker.com/engine/storage/bind-mounts/)
 
 迁移前完整停止旧管理服务和全部 Trackio 实例，再备份整个 `instance/` 与 `data/`，保留符号链接。尤其要保留 `manager.db` 和 `secret.key`，不能用空目录覆盖它们。先在备份副本上验收，正式切换时禁止宿主机旧进程和容器同时写同一份数据。
 
@@ -129,13 +129,13 @@ Gunicorn 和 Nginx 的访问、错误日志输出到 stdout / stderr，由 Compo
 | 阶段 | 需要验证的内容 | 通过标准 |
 | --- | --- | --- |
 | 镜像构建 | 固定依赖安装、Trackio 启动器、非 root 文件权限、UI 资源完整 | 镜像可启动，无宿主机 `.venv` 或凭据依赖 |
-| 原有回归 | 在测试镜像中运行完整现有测试，包括真实 Nginx 测试 | 基线 54 项通过，不因缺少 Nginx 而跳过集成项；新增项也全部通过 |
+| 原有回归 | 在测试镜像中运行完整现有测试，包括真实 Nginx 测试 | 基线 79 项通过，不因缺少 Nginx 而跳过集成项；新增项也全部通过 |
 | 双容器链路 | 通过 gateway 访问 `/u/`、`/p/`、静态资源及上传接口 | 无 404 / 502，Host、登录限流和来源校验正常 |
-| 注册和共享权限 | 管理员邀请注册；创建者邀请已注册成员；编辑、只读、退出、移除与 Token 撤销 | 与现有行为一致，退出或移除后无法继续访问或写入 |
+| 注册和团队项目权限 | 管理员邀请注册；创建者邀请已注册成员；编辑、只读、退出、移除与 Token 撤销 | 与现有行为一致，退出或移除后无法继续访问或写入 |
 | 实验记录 | SDK 上报 25 个 iteration 点，读取 loss / accuracy，并访问媒体文件 | 曲线横轴和点数正确，文件可读取，跨用户数据隔离 |
 | 容器生命周期 | 正常 stop / up、restart、重建、强制终止，以及多个运行实例下的停机 | 无残留实例和错误 PID 识别；重启后可按需启动，无数据库损坏 |
 | 持久化 | down / up 后检查账号、成员、Token、实验、密钥和文件 | 挂载数据完整，删除容器不导致实验丢失 |
-| 旧数据迁移 | 在当前数据的独立副本上按原绝对路径挂载 | 数据库记录一致，历史媒体和 `_shared` 兼容链接有效 |
+| 旧数据迁移 | 在独立副本上挂载到新的容器路径并执行 `relocate-data` | 账号及实验记录保留，曲线、媒体和 `_shared` 兼容链接可用 |
 | 更新与回滚 | 更新 manager 镜像并恢复 gateway；恢复旧镜像及匹配的数据备份 | 入口恢复，旧版本能读取恢复后的数据，不依赖未经验证的降级兼容 |
 
 现有测试会在临时目录中创建数据。测试镜像需要单独安装 pytest 和 Nginx，生产 manager 镜像无需内置 Nginx。其中 `test_scripts.py` 测试宿主机脚本并依赖项目下 `.venv`；容器测试阶段需准备该环境或有针对性地调整测试夹具，不能直接删除这项测试。现有 Nginx 集成测试在同一测试环境里启动进程，也不能代替新增的跨容器链路测试。
@@ -160,7 +160,7 @@ docker compose stop       # 停止，保留数据
 1. 完成容器化文件与生命周期适配，在临时数据和测试端口上通过全部验收。
 2. 完整停止当前管理应用和实验实例，备份 `instance/` 与 `data/`，记录待恢复的项目。
 3. 释放宿主机 Nginx 占用的 9000 监听。若它还服务其他网站，只调整 Trackio 对应配置，不停止整个 Nginx。
-4. 使用已验收镜像和正式数据挂载启动 Compose，核对目录权限和数据，再通过 9000 验证登录、共享权限及实验记录。
+4. 使用已验收镜像和正式数据挂载启动 Compose，核对目录权限和数据，再通过 9000 验证登录、团队项目权限及实验记录。
 5. 如需回滚，先完整停止容器，再按备份恢复数据和旧入口。切换后若已有新写入，需先保留新数据并处理差异，不能直接用旧备份覆盖。
 
 本轮交付仅为此评估文档。Dockerfile、Compose 配置、入口脚本及容器验收均待后续实施。

@@ -5,7 +5,7 @@
     <div>
         <a class="ui-hint" href="{{ url_for('index') }}">← {{ t('返回我的空间', 'Back to my workspace') }}</a>
         <h1>{{ project.name }}</h1>
-        <p class="ui-muted">{{ t('项目', 'Project') }} · {{ t('所有者', 'Owner') }} {{ project.owner.username }} · {{ t('所有者', 'Owner') if membership.role == 'owner' else (t('编辑', 'Editor') if membership.role == 'editor' else t('只读', 'Viewer')) }}</p>
+        <p class="ui-muted">{{ t('团队项目', 'Team project') }} · {{ t('所有者', 'Owner') }} {{ project.owner.display_name }} · {{ t('所有者', 'Owner') if membership.role == 'owner' else (t('编辑', 'Editor') if membership.role == 'editor' else t('只读', 'Viewer')) }}</p>
     </div>
 </div>
 {% set running = is_running(project) %}
@@ -35,17 +35,16 @@
                     <tbody>
                     {% for m in members %}
                     <tr>
-                        <td class="ui-mono user-name">{{ m.user.username }}</td>
+                        <td class="ui-mono user-name">{{ m.user.display_name }}</td>
                         <td>
                             {% if membership.role == 'owner' and m.role != 'owner' %}
                             <form class="row-actions" action="{{ url_for('set_project_member', project_id=project.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="username" value="{{ m.user.username }}">
-                                <select class="role-select" name="role" aria-label="{{ t('成员权限', 'Member role') }} {{ m.user.username }}">
+                                <select class="role-select" name="role" aria-label="{{ t('成员权限', 'Member role') }} {{ m.user.username }}" onchange="this.form.requestSubmit()">
                                     <option value="viewer" {{ 'selected' if m.role == 'viewer' else '' }}>{{ t('只读', 'Viewer') }}</option>
                                     <option value="editor" {{ 'selected' if m.role == 'editor' else '' }}>{{ t('编辑', 'Editor') }}</option>
                                 </select>
-                                <button class="ui-button ui-button--secondary" type="submit">{{ t('保存', 'Save') }}</button>
                             </form>
                             {% else %}{{ t('所有者', 'Owner') if m.role == 'owner' else (t('编辑', 'Editor') if m.role == 'editor' else t('只读', 'Viewer')) }}{% endif %}
                         </td>
@@ -63,8 +62,7 @@
             {% if membership.role == 'owner' %}
             <form class="panel-body form-stack" action="{{ url_for('set_project_member', project_id=project.id) }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <label class="field" for="member-username">{{ t('邀请已注册用户', 'Invite a registered user') }}<input id="member-username" class="ui-input" name="username" list="registered-users" maxlength="64" placeholder="{{ t('填写成员用户名', 'Enter their username') }}" required></label>
-                <datalist id="registered-users">{% for candidate in candidates %}<option value="{{ candidate.username }}"></option>{% endfor %}</datalist>
+                <label class="field" for="member-username">{{ t('邀请已注册用户', 'Invite a registered user') }}<select id="member-username" class="ui-input" name="username" required><option value="">{{ t('选择用户', 'Choose a user') }}</option>{% for candidate in candidates %}<option value="{{ candidate.username }}">{{ candidate.display_name }}</option>{% endfor %}</select></label>
                 <div class="form-footer">
                     <label class="field" for="member-role">{{ t('权限', 'Role') }}<select id="member-role" class="role-select" name="role"><option value="viewer">{{ t('只读', 'Viewer') }}</option><option value="editor">{{ t('编辑', 'Editor') }}</option></select></label>
                     <button class="ui-button" type="submit">{{ t('添加成员', 'Add member') }}</button>
@@ -74,18 +72,18 @@
         </section>
         {% if membership.role == 'owner' %}
         <section class="ui-panel">
-            <form class="panel-body form-footer" action="{{ url_for('delete_project', project_id=project.id) }}" method="post" data-confirm="{{ t('删除共享项目并撤销所有成员权限？实验数据目录将保留。', 'Delete this project and revoke all access? Experiment data will be retained.') }}" onsubmit="return confirm(this.dataset.confirm)">
+            <form class="panel-body form-footer" action="{{ url_for('delete_project', project_id=project.id) }}" method="post" data-confirm="{{ t('删除团队项目并撤销所有成员权限？实验数据目录将保留。', 'Delete this team project and revoke all access? Experiment data will be retained.') }}" onsubmit="return confirm(this.dataset.confirm)">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <p class="ui-hint">{{ t('删除后所有成员与 Token 将失去访问权限。', 'Deleting the project revokes access for all members and tokens.') }}</p>
-                <button class="ui-button ui-button--danger" type="submit">{{ t('删除项目', 'Delete project') }}</button>
+                <button class="ui-button ui-button--danger" type="submit">{{ t('删除团队项目', 'Delete team project') }}</button>
             </form>
         </section>
         {% else %}
         <section class="ui-panel">
-            <form class="panel-body form-footer" action="{{ url_for('leave_project', project_id=project.id) }}" method="post" data-confirm="{{ t('退出共享项目？你的项目 Token 将失效，重新加入需要所有者再次邀请。', 'Leave this project? Your project token will be revoked. The owner must invite you again to rejoin.') }}" onsubmit="return confirm(this.dataset.confirm)">
+            <form class="panel-body form-footer" action="{{ url_for('leave_project', project_id=project.id) }}" method="post" data-confirm="{{ t('退出团队项目？你的项目 Token 将失效，重新加入需要所有者再次邀请。', 'Leave this team project? Your project token will be revoked. The owner must invite you again to rejoin.') }}" onsubmit="return confirm(this.dataset.confirm)">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <p class="ui-hint">{{ t('退出不会删除已提交的实验，也不会影响其他成员。', 'Leaving preserves your submitted experiments and does not affect other members.') }}</p>
-                <button class="ui-button ui-button--danger" type="submit">{{ t('退出共享项目', 'Leave project') }}</button>
+                <button class="ui-button ui-button--danger" type="submit">{{ t('退出团队项目', 'Leave team project') }}</button>
             </form>
         </section>
         {% endif %}

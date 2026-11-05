@@ -1,23 +1,26 @@
 {% extends 'base.html' %}
 {% block title %}{{ t('用户管理', 'User management') }}{% endblock %}
 {% block content %}
-<div class="page-heading"><div><a class="ui-hint" href="{{ url_for('index') }}">← {{ t('返回我的 Panel', 'Back to my panel') }}</a><h1>{{ t('用户管理', 'User management') }}</h1><p class="ui-muted">{{ t('生成注册链接，由用户自行设置密码。', 'Generate registration links so users can set their own passwords.') }}</p></div></div>
-{% if invitation_url %}
-<section class="ui-panel panel-body form-stack">
-    <h2 class="panel-title">{{ t('邀请注册链接', 'Registration invitation') }}</h2>
-    <p class="ui-hint">{{ t('链接 7 天内有效，仅可使用一次。请复制并发送给受邀者；重新生成会撤销旧链接。', 'Valid for 7 days and one use. Copy and send it to the recipient. Regenerating revokes the previous link.') }}</p>
-    <input id="invitation-url" class="ui-input ui-mono" readonly value="{{ invitation_url }}" aria-label="{{ t('邀请注册链接', 'Registration invitation') }}" onclick="this.select()">
-</section>
-{% endif %}
+<div class="page-heading"><div><a class="ui-hint" href="{{ url_for('index') }}">← {{ t('返回我的工作空间', 'Back to my panel') }}</a><h1>{{ t('用户管理', 'User management') }}</h1><p class="ui-muted">{{ t('生成注册链接，由用户自行设置密码。', 'Generate registration links so users can set their own passwords.') }}</p></div></div>
 <section class="ui-panel">
     <div class="ui-pane-heading"><h2 class="panel-title">{{ t('账号列表', 'Accounts') }}</h2></div>
+    <p class="panel-body ui-hint">{{ t('改用户名之前，请停止该用户的个人实例和其拥有的团队项目。数据目录会随之改名，个人实验上报 URL 需更新；密码、Token 和成员权限保留。', 'Before renaming, stop the user’s personal instance and owned team projects. The data directory is renamed and personal upload URLs must be updated. Passwords, tokens and memberships are preserved.') }}</p>
     <div class="table-scroll"><table class="instance-table">
         <thead><tr><th>{{ t('用户名', 'Username') }}</th><th>{{ t('角色', 'Role') }}</th><th>{{ t('注册状态', 'Registration') }}</th><th>{{ t('操作', 'Actions') }}</th></tr></thead>
         <tbody>{% for u in users %}<tr>
-            <td class="ui-mono user-name">{{ u.username }}</td><td>{{ t('管理员', 'Administrator') if u.is_admin else t('用户', 'User') }}</td><td>{{ t('已注册', 'Registered') if u.password_hash else t('待注册', 'Pending') }}</td>
+            <td><form class="form-stack" action="{{ url_for('edit_user', uid=u.id) }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label class="field" for="username-{{ u.id }}">{{ t('用户名', 'Username') }}<input id="username-{{ u.id }}" class="ui-input" name="username" value="{{ u.username }}" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}" required></label>
+                <label class="field" for="nickname-{{ u.id }}">{{ t('昵称（可选）', 'Nickname (optional)') }}<input id="nickname-{{ u.id }}" class="ui-input" name="nickname" value="{{ u.nickname }}" maxlength="64"></label>
+                <button class="ui-button ui-button--secondary" type="submit">{{ t('更新账号', 'Update account') }}</button>
+            </form></td><td>{{ t('管理员', 'Administrator') if u.is_admin else t('用户', 'User') }}</td><td>{{ t('已注册', 'Registered') if u.password_hash else t('待注册', 'Pending') }}</td>
             <td><div class="row-actions">
                 {% if not u.password_hash %}<form action="{{ url_for('renew_user_invitation', uid=u.id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="ui-button ui-button--secondary" type="submit">{{ t('重新生成邀请', 'Regenerate invitation') }}</button></form>{% endif %}
-                {% if not u.is_admin %}<form action="{{ url_for('delete', uid=u.id) }}" method="post" data-confirm="{{ t('删除此账号？该账号的凭据和项目成员权限将失效。', 'Delete this account and revoke its credentials and memberships?') }}" onsubmit="return confirm(this.dataset.confirm)"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="ui-button ui-button--danger" type="submit" aria-label="{{ t('删除', 'Delete') }} {{ u.username }}">{{ t('删除', 'Delete') }}</button></form>{% endif %}
+                {% if not u.is_admin %}<form action="{{ url_for('delete', uid=u.id) }}" method="post" data-delete-user
+                    data-projects='{{ projects_by_owner.get(u.id, []) | tojson }}'
+                    data-projects-confirm="{{ t('该用户拥有以下团队项目：{{projects}}。是否继续逐一确认删除？', 'This user owns these team projects: {{projects}}. Continue to confirm each deletion?') }}"
+                    data-project-confirm="{{ t('删除团队项目 {{name}}？所有成员将失去访问权限，实验数据目录保留。', 'Delete team project {{name}}? All members will lose access. Experiment data is retained.') }}"
+                    data-confirm="{{ t('确认删除账号 {username}？该账号的凭据和项目成员权限将失效，实验数据目录保留。', 'Delete account {username} and revoke its credentials and memberships? Experiment data is retained.', username=u.username) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="ui-button ui-button--danger" type="submit" aria-label="{{ t('删除', 'Delete') }} {{ u.username }}">{{ t('删除', 'Delete') }}</button></form>{% endif %}
             </div></td>
         </tr>{% endfor %}</tbody>
     </table></div>
@@ -26,7 +29,9 @@
     <div class="ui-pane-heading"><h2 class="panel-title">{{ t('邀请新用户', 'Invite a new user') }}</h2></div>
     <form class="panel-body form-stack" action="{{ url_for('add_user') }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label class="field" for="new-username">{{ t('用户名', 'Username') }}<input id="new-username" class="ui-input" name="username" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}" required></label>
-        <div class="form-footer"><p class="ui-hint">{{ t('注册完成后，用户即可登录个人 Panel，并加入项目。', 'After registering, users can sign in to their panel and join projects.') }}</p><button class="ui-button" type="submit">{{ t('生成邀请链接', 'Generate invitation link') }}</button></div>
+        <label class="field" for="new-nickname">{{ t('昵称（可选）', 'Nickname (optional)') }}<input id="new-nickname" class="ui-input" name="nickname" maxlength="64"></label>
+        <div class="form-footer"><p class="ui-hint">{{ t('注册完成后，用户即可登录个人工作空间，并加入项目。', 'After registering, users can sign in to their panel and join projects.') }}</p><button class="ui-button" type="submit">{{ t('生成邀请链接', 'Generate invitation link') }}</button></div>
     </form>
 </section>
+<script src="{{ url_for('static', filename='admin_users.js') }}" defer></script>
 {% endblock %}

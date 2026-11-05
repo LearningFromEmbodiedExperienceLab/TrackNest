@@ -19,9 +19,10 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
+from storage_config import storage_paths
 
 BASE_DIR = Path(__file__).resolve().parent
-STATE_DIR = Path(os.environ.get("MANAGER_STATE_DIR", BASE_DIR / "instance")).resolve()
+STATE_DIR, DATA_ROOT = storage_paths()
 STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
 # Persist the signing key so sessions survive a manager restart.
 key_path = STATE_DIR / "secret.key"
@@ -46,7 +47,6 @@ app.config.update(
     MAX_CONTENT_LENGTH=16 * 1024,
 )
 db = SQLAlchemy(app)
-DATA_ROOT = Path(os.environ.get("MANAGER_DATA_ROOT", BASE_DIR / "data")).resolve()
 PORT_START = 9002
 PORT_END = 9141
 USERNAME_PATTERN = r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}"
@@ -55,12 +55,17 @@ USERNAME_PATTERN = r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}"
 class TrackioUser(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False)
+    nickname = db.Column(db.String(64), nullable=False, default="")
     password_hash = db.Column(db.String(256))
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     write_token = db.Column(db.String(64), nullable=False)
     port = db.Column(db.Integer, unique=True, nullable=False)
     pid = db.Column(db.Integer, default=0)
     data_dir = db.Column(db.String(1024), nullable=False)
+
+    @property
+    def display_name(self):
+        return f"{self.username} ({self.nickname})" if self.nickname else self.username
 
     @property
     def backend_path(self):
@@ -114,6 +119,8 @@ def init_db():
     db.create_all()
     # Existing accounts remain locked until an administrator assigns a password.
     columns = {c["name"] for c in inspect(db.engine).get_columns("trackio_user")}
+    if "nickname" not in columns:
+        db.session.execute(text("ALTER TABLE trackio_user ADD COLUMN nickname VARCHAR(64) NOT NULL DEFAULT ''"))
     if "password_hash" not in columns:
         db.session.execute(text("ALTER TABLE trackio_user ADD COLUMN password_hash VARCHAR(256)"))
     if "is_admin" not in columns:
@@ -205,7 +212,57 @@ def stop_trackio(user):
     db.session.commit()
 
 
-def create_user(username, password, admin=False):
+def validated_nickname(nickname):
+    nickname = nickname.strip()
+    if len(nickname) > 64:
+        abort(400, t("昵称最多 64 个字符", "Nickname must not exceed 64 characters"))
+    return nickname
+
+
+def rename_user(user, username, nickname):
+    if not re.fullmatch(USERNAME_PATTERN, username):
+        abort(400, t("用户名格式无效", "Invalid username"))
+    if username == user.username:
+        user.nickname = nickname
+        db.session.commit()
+        return
+    if TrackioUser.query.filter_by(username=username).first():
+        abort(400, t("用户名已存在", "Username already exists"))
+    projects = SharedProject.query.filter_by(owner_id=user.id).all()
+    if any(is_running(backend) for backend in [user, *projects]):
+        abort(400, t("请先停止该用户的个人实例及其拥有的团队项目", "Stop this user's personal instance and owned team projects first"))
+    source, destination = Path(user.data_dir), DATA_ROOT / username
+    if destination.exists() or destination.is_symlink():
+        abort(400, t("目标数据目录已存在，未覆盖", "The target data directory already exists; nothing was overwritten"))
+    project_paths = [(project, destination / Path(project.data_dir).relative_to(source)) for project in projects]
+    aliases = [(link, os.readlink(link), link.resolve().relative_to(source))
+               for link in (DATA_ROOT / "_shared").rglob("*")
+               if link.is_symlink() and link.resolve().is_relative_to(source)]
+    moved = False
+    try:
+        if source.exists():
+            source.rename(destination)
+            moved = True
+        for link, _, relative in aliases:
+            link.unlink()
+            link.symlink_to(os.path.relpath(destination / relative, link.parent), target_is_directory=True)
+        user.username, user.data_dir, user.pid = username, str(destination), 0
+        user.nickname = nickname
+        for project, target in project_paths:
+            project.data_dir, project.pid = str(target), 0
+        db.session.commit()
+    except (OSError, SQLAlchemyError):
+        db.session.rollback()
+        if moved:
+            destination.rename(source)
+        for link, target, _ in aliases:
+            link.unlink(missing_ok=True)
+            link.symlink_to(target, target_is_directory=True)
+        raise
+
+
+def create_user(username, password, admin=False, nickname=""):
+    nickname = validated_nickname(nickname)
     if not re.fullmatch(USERNAME_PATTERN, username):
         raise ValueError(t("用户名限 1–64 位字母、数字、下划线或连字符，首位须为字母或数字", "Use 1–64 letters, numbers, underscores or hyphens; start with a letter or number"))
     if password is not None and len(password) < 12:
@@ -213,7 +270,7 @@ def create_user(username, password, admin=False):
     if TrackioUser.query.filter_by(username=username).first():
         raise ValueError(t("用户已存在", "This username already exists"))
     user = TrackioUser(
-        username=username, password_hash=generate_password_hash(password) if password is not None else None,
+        username=username, nickname=nickname, password_hash=generate_password_hash(password) if password is not None else None,
         is_admin=admin, write_token=secrets.token_hex(32),
         port=get_free_port(), data_dir=str(DATA_ROOT / username),
     )
@@ -273,7 +330,7 @@ def set_language():
     if language not in ("zh", "en"):
         abort(400)
     target = request.form.get("next", "/")
-    response = redirect(target if target in ("/", "/login", "/admin/users", "/register") or re.fullmatch(r"/projects/[a-f0-9]{32}|/register#invite=[A-Za-z0-9_-]{43}", target) else url_for("index"))
+    response = redirect(target if target in ("/", "/login", "/admin/users", "/register", "/profile") or re.fullmatch(r"/projects/[a-f0-9]{32}|/register#invite=[A-Za-z0-9_-]{43}", target) else url_for("index"))
     response.set_cookie(
         "trackio_manager_language", language, max_age=365 * 24 * 60 * 60,
         httponly=True, samesite="Lax", secure=app.config["SESSION_COOKIE_SECURE"],
@@ -311,6 +368,41 @@ def require_admin():
         abort(403)
 
 
+def admin_users_page(**context):
+    projects_by_owner = {}
+    for project in SharedProject.query.order_by(SharedProject.name).all():
+        projects_by_owner.setdefault(project.owner_id, []).append({"id": project.id, "name": project.name})
+    return render_template("admin_users.html", users=TrackioUser.query.order_by(TrackioUser.id).all(),
+                           projects_by_owner=projects_by_owner, **context)
+
+
+@app.route("/profile", methods=["GET", "POST"])
+def profile():
+    if request.method == "POST":
+        with instance_lock():
+            g.user.nickname = validated_nickname(request.form.get("nickname", ""))
+            db.session.commit()
+        flash(t("昵称已更新", "Nickname updated"))
+        return redirect(url_for("profile"))
+    return render_template("profile.html")
+
+
+@app.post("/admin/users/<int:uid>/edit")
+def edit_user(uid):
+    require_admin()
+    nickname = validated_nickname(request.form.get("nickname", ""))
+    with instance_lock():
+        user = db.get_or_404(TrackioUser, uid)
+        try:
+            rename_user(user, request.form.get("username", "").strip(), nickname)
+        except (OSError, SQLAlchemyError):
+            db.session.rollback()
+            app.logger.exception("Account update failed")
+            abort(400, t("更新失败，原数据已保留，请检查目录权限后重试", "Update failed; original data was retained. Check directory permissions and retry"))
+    flash(t("账号已更新；改名后请更新个人实验上报 URL", "Account updated. After renaming, update your personal experiment upload URL"))
+    return redirect(url_for("admin_users"))
+
+
 def invitation_page(user):
     token = secrets.token_urlsafe(32)
     invitation = db.session.get(UserInvitation, user.id)
@@ -320,14 +412,14 @@ def invitation_page(user):
     invitation.token_hash = hashlib.sha256(token.encode()).hexdigest()
     invitation.expires_at = int(time.time()) + 7 * 24 * 60 * 60
     db.session.commit()
-    return render_template("admin_users.html", users=TrackioUser.query.order_by(TrackioUser.id).all(),
+    return render_template("invitation.html", user=user,
                            invitation_url=request.host_url + "register#invite=" + token)
 
 
 @app.get("/admin/users")
 def admin_users():
     require_admin()
-    return render_template("admin_users.html", users=TrackioUser.query.order_by(TrackioUser.id).all())
+    return admin_users_page()
 
 
 @app.post("/admin/users/<int:uid>/invitation")
@@ -382,7 +474,7 @@ def add_user():
     require_admin()
     try:
         with instance_lock():
-            user = create_user(request.form.get("username", "").strip(), None)
+            user = create_user(request.form.get("username", "").strip(), None, nickname=request.form.get("nickname", ""))
             return invitation_page(user)
     except (ValueError, RuntimeError) as exc:
         flash(str(exc))
@@ -426,9 +518,18 @@ def delete(uid):
         user = db.get_or_404(TrackioUser, uid)
         if user.is_admin:
             abort(400, t("不能从网页删除管理员", "Administrator accounts cannot be deleted from this page"))
-        if SharedProject.query.filter_by(owner_id=user.id).first():
-            abort(400, t("请先删除该用户拥有的共享项目", "Delete this user's shared projects before deleting the account"))
+        projects = SharedProject.query.filter_by(owner_id=user.id).order_by(SharedProject.name).all()
+        if set(request.form.getlist("confirmed_project_ids")) != {project.id for project in projects}:
+            flash(t("该用户拥有团队项目：{names}。请逐一确认后再删除；项目列表如有变化，请刷新重试。",
+                    "This user owns team projects: {names}. Confirm each project before deleting; refresh if the list has changed.",
+                    names=", ".join(project.name for project in projects) or t("无", "none")))
+            return redirect(url_for("admin_users"))
+        for project in projects:
+            stop_trackio(project)
         stop_trackio(user)
+        for project in projects:
+            ProjectMember.query.filter_by(project_id=project.id).delete()
+            db.session.delete(project)
         ProjectMember.query.filter_by(user_id=user.id).delete()
         UserInvitation.query.filter_by(user_id=user.id).delete()
         db.session.delete(user)
@@ -652,7 +753,7 @@ def leave_project(project_id):
         name = member.project.name
         db.session.delete(member)
         db.session.commit()
-    flash(t("已退出共享项目 {name}，项目 Token 已失效", "You left {name}. Your project token has been revoked", name=name))
+    flash(t("已退出团队项目 {name}，项目 Token 已失效", "You left {name}. Your project token has been revoked", name=name))
     return redirect(url_for("index"))
 
 
@@ -666,7 +767,7 @@ def manage_project_instance(project_id):
         try:
             (start_trackio if action == "start" else stop_trackio)(project)
         except (OSError, RuntimeError) as exc:
-            app.logger.exception("Shared project startup failed")
+            app.logger.exception("Team project startup failed")
             flash(str(exc))
     return redirect(url_for("project_detail", project_id=project_id))
 
@@ -679,7 +780,7 @@ def delete_project(project_id):
         ProjectMember.query.filter_by(project_id=project_id).delete()
         db.session.delete(project)
         db.session.commit()
-    flash(t("共享项目已删除，实验数据目录保留", "Shared project deleted. Experiment data is retained"))
+    flash(t("团队项目已删除，实验数据目录保留", "Team project deleted. Experiment data is retained"))
     return redirect(url_for("index"))
 
 
@@ -778,6 +879,43 @@ def set_password(username, password):
     user.password_hash = generate_password_hash(password)
     db.session.commit()
     click.echo("密码已更新")
+
+
+@app.cli.command("relocate-data")
+def relocate_data_command():
+    """Adapt copied data to the current deployment's storage directory."""
+    from data_transfer import relocate_data
+    try:
+        relocate_data()
+    except (OSError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+        db.session.rollback()
+        raise click.ClickException("数据目录适配失败，请检查数据副本和目录权限。" if isinstance(exc, SQLAlchemyError) else str(exc)) from exc
+    click.echo(f"数据目录已适配：{DATA_ROOT}；失效的实例 PID 已清理。")
+
+
+@app.cli.command("export-user")
+@click.argument("username")
+@click.argument("destination", type=click.Path(path_type=Path))
+def export_user_command(username, destination):
+    """Export a stopped user's account and owned team projects."""
+    from data_transfer import export_user
+    try:
+        export_user(username, destination)
+    except (OSError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+        raise click.ClickException("导出失败，请检查管理数据库。" if isinstance(exc, SQLAlchemyError) else str(exc)) from exc
+    click.echo(f"用户 {username} 已导出到 {destination.resolve()}，备份包含登录凭据，请妥善保管。")
+
+
+@app.cli.command("import-user")
+@click.argument("source", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def import_user_command(source):
+    """Import an account as a regular user without granting other memberships."""
+    from data_transfer import import_user
+    try:
+        user = import_user(source)
+    except (OSError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+        raise click.ClickException("导入失败，数据库未完成导入，请检查备份。" if isinstance(exc, SQLAlchemyError) else str(exc)) from exc
+    click.echo(f"用户 {user.username} 已导入：{user.data_dir}。请在团队项目中重新邀请其他成员。")
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ coverage.xml
 # Trackio experiments and manager state (database, tokens, signing key)
 /instance/
 /data/
+/.storage.json*
 secret.key
 *.db
 *.db-*

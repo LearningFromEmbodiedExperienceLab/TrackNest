@@ -11,6 +11,10 @@ from conftest import login, post
 def create_invitation(admin, username):
     response = post(admin, "/add", username=username)
     assert response.status_code == 200
+    assert 'id="copy-invitation"' in response.text
+    assert 'href="/admin/users"' in response.text
+    assert 'id="new-username"' not in response.text
+    assert username in response.text
     url = re.search(r'id="invitation-url"[^>]*value="([^"]+)"', response.text)[1]
     return parse_qs(urlsplit(url).fragment)["invite"][0]
 
@@ -25,7 +29,7 @@ def test_administrator_and_users_have_their_own_panel(users):
         client = app.test_client()
         login(client, username)
         page = client.get("/")
-        assert "我的 Panel" in page.text
+        assert "我的工作空间" in page.text
         assert 'id="project-name"' in page.text
         assert 'id="new-username"' not in page.text
         assert (client.get("/admin/users").status_code == 200) == (username == "admin")
@@ -65,6 +69,7 @@ def test_renew_expire_delete_and_registration_security(users):
     old = create_invitation(admin, "pending")
     user = TrackioUser.query.filter_by(username="pending").one()
     response = post(admin, f"/admin/users/{user.id}/invitation")
+    assert 'id="copy-invitation"' in response.text
     token = parse_qs(urlsplit(re.search(r'id="invitation-url"[^>]*value="([^"]+)"', response.text)[1]).fragment)["invite"][0]
     assert token != old
     guest = app.test_client()
@@ -93,7 +98,7 @@ def test_pending_accounts_cannot_be_project_members(users):
     post(client, "/projects", name="private-project")
     project = SharedProject.query.one()
     page = client.get(f"/projects/{project.id}")
-    candidates = re.search(r'<datalist id="registered-users">(.*?)</datalist>', page.text, re.S)[1]
+    candidates = re.search(r'<select id="member-username"[^>]*>(.*?)</select>', page.text, re.S)[1]
     assert 'value="bob"' in candidates and 'value="pending"' not in candidates
     assert post(client, f"/projects/{project.id}/members", username="pending", role="viewer").status_code == 400
 
