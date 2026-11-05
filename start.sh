@@ -12,7 +12,7 @@ import time
 from storage_config import select_storage, storage_paths
 from script_output import script_parser
 
-parser, console = script_parser("./start.sh", "Start the Trackio management service in the background", "后台启动 Trackio 多用户管理服务")
+parser, console = script_parser("./start.sh", "Start TrackNest in the background", "后台启动 TrackNest")
 parser.add_argument("--storage-dir", type=Path, help=console.text("storage root containing instance/ and data/ (default: project directory)", "持久化根目录，内含 instance/ 和 data/；不传则使用项目默认目录"))
 args = parser.parse_args()
 with socket.socket() as sock:

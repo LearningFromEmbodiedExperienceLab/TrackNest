@@ -40,7 +40,7 @@ app.config.update(
     SECRET_KEY=key_path.read_text(),
     SQLALCHEMY_DATABASE_URI=f"sqlite:///{STATE_DIR / 'manager.db'}",
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    SESSION_COOKIE_NAME="trackio_manager_session",
+    SESSION_COOKIE_NAME="tracknest_session",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("MANAGER_HTTPS") == "1",
@@ -288,7 +288,7 @@ def authenticate():
         if request.query_string:
             path += "?" + request.query_string.decode("latin1")
         return redirect(f"{request.scheme}://{host}:9000{path}", code=307)
-    g.language = "en" if request.cookies.get("trackio_manager_language") == "en" else "zh"
+    g.language = "en" if request.cookies.get("tracknest_language") == "en" else "zh"
     g.user = db.session.get(TrackioUser, session.get("user_id")) if session.get("user_id") else None
     if request.endpoint in ("proxy_personal", "proxy_project"):
         request.max_content_length = 100 * 1024 * 1024
@@ -332,7 +332,7 @@ def set_language():
     target = request.form.get("next", "/")
     response = redirect(target if target in ("/", "/login", "/admin/users", "/register", "/profile") or re.fullmatch(r"/projects/[a-f0-9]{32}|/register#invite=[A-Za-z0-9_-]{43}", target) else url_for("index"))
     response.set_cookie(
-        "trackio_manager_language", language, max_age=365 * 24 * 60 * 60,
+        "tracknest_language", language, max_age=365 * 24 * 60 * 60,
         httponly=True, samesite="Lax", secure=app.config["SESSION_COOKIE_SECURE"],
     )
     return response

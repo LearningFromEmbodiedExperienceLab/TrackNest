@@ -1,4 +1,4 @@
-# Docker Compose 部署评估与验收计划
+# TrackNest Docker Compose 部署方案
 
 日期：2026-11-05。本文只做分析，不实施容器化、不运行测试或部署命令，也不调整现有服务。
 
@@ -73,8 +73,8 @@ MANAGER_DATA_ROOT=/storage/data
 
 | 宿主机路径 | 容器路径 | 用途 |
 | --- | --- | --- |
-| `<path-to>/trackio_manager/instance` | `/storage/instance` | 管理数据库和签名密钥 |
-| `<path-to>/trackio_manager/data` | `/storage/data` | 实验数据库、媒体、日志和兼容链接 |
+| `<path-to>/tracknest/instance` | `/storage/instance` | 管理数据库和签名密钥 |
+| `<path-to>/tracknest/data` | `/storage/data` | 实验数据库、媒体、日志和兼容链接 |
 
 环境变量使用容器内路径。须先在完整数据副本上验证适配、曲线、媒体和文件访问，再切换正式数据；不要让宿主机原服务和容器同时操作同一份目录。bind mount 的宿主机目录与容器目录可以不同。[Docker bind mount 说明](https://docs.docker.com/engine/storage/bind-mounts/)
 

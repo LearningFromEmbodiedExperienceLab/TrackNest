@@ -325,7 +325,7 @@ def test_account_project_deletion_requires_admin_and_csrf(users, project):
     assert post(admin, f"/delete/{users['admin'].id}", confirmed_project_ids=[project.id]).status_code == 400
     assert db.session.get(TrackioUser, users["alice"].id) is not None
     assert db.session.get(SharedProject, project.id) is not None
-    admin.set_cookie("trackio_manager_language", "en")
+    admin.set_cookie("tracknest_language", "en")
     page = post(admin, "/add", username="pending")
     assert page.status_code == 200
     assert 'id="copy-invitation"' in page.text

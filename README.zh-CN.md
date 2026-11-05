@@ -1,6 +1,8 @@
-# Trackio 多用户管理
+# TrackNest
 
 [English](README.md) | 简体中文
+
+基于 Trackio、可自行部署的个人与团队实验工作空间。
 
 所有用户通过同一个登录页进入自己的 Panel，创建团队项目、邀请已注册成员并查看实验。管理员在“用户管理”中生成新用户的邀请注册链接，并在结果页点击“复制链接”；项目成员可自行退出团队项目。
 
@@ -8,10 +10,10 @@
 
 ## 首次安装
 
-要求 Linux、Python 3.10+ 和 Nginx。以下命令均在 `<path-to>/trackio_manager` 中执行，并使用同一个系统账号运行。
+要求 Linux、Python 3.10+ 和 Nginx。以下命令均在 `<path-to>/tracknest` 中执行，并使用同一个系统账号运行。
 
 ```bash
-cd <path-to>/trackio_manager
+cd <path-to>/tracknest
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/flask --app app init-db
@@ -67,7 +69,7 @@ tail -f instance/gunicorn-error.log
 
 ## 数据保存位置
 
-默认根目录为 `<path-to>/trackio_manager`：
+默认根目录为 `<path-to>/tracknest`：
 
 | 路径 | 内容 |
 | --- | --- |
@@ -135,12 +137,12 @@ tail -f instance/gunicorn-error.log
 
 ## 卸载
 
-请将下方 `/path/to/trackio_manager` 替换为实际项目目录。
+请将下方 `/path/to/tracknest` 替换为实际项目目录。
 
 1. 使用与启动时相同的系统账号和存储环境变量停止应用：
 
    ```bash
-   cd /path/to/trackio_manager
+   cd /path/to/tracknest
    ./stop.sh
    ```
 
@@ -156,7 +158,7 @@ tail -f instance/gunicorn-error.log
 3. 确认停机及所需备份完成后，永久删除项目目录，其中的代码、`.venv` 和数据也会一并删除：
 
    ```bash
-   rm -rf -- /path/to/trackio_manager
+   rm -rf -- /path/to/tracknest
    ```
 
 项目目录之外的存储目录和备份会保留；如需清除这些数据，请另行删除。无需卸载系统 Python 或 Nginx。

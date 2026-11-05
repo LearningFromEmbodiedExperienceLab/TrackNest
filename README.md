@@ -1,6 +1,8 @@
-# Trackio Multi-User Manager
+# TrackNest
 
 English | [简体中文](README.zh-CN.md)
+
+A self-hosted experiment workspace for individuals and teams, powered by Trackio.
 
 All users share one login page and get their own Panel to create team projects, invite registered users, and view experiments. Administrators generate registration invitation links in User Management and copy them from the invitation result page. Members can leave team projects themselves.
 
@@ -8,10 +10,10 @@ Administrators can edit their own username and other users’ usernames in User 
 
 ## First-time setup
 
-Requires Linux, Python 3.10+, and Nginx. Run the following commands from `<path-to>/trackio_manager`, using the same system account throughout.
+Requires Linux, Python 3.10+, and Nginx. Run the following commands from `<path-to>/tracknest`, using the same system account throughout.
 
 ```bash
-cd <path-to>/trackio_manager
+cd <path-to>/tracknest
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/flask --app app init-db
@@ -67,7 +69,7 @@ tail -f instance/gunicorn-error.log
 
 ## Data storage
 
-The default root is `<path-to>/trackio_manager`:
+The default root is `<path-to>/tracknest`:
 
 | Path | Contents |
 | --- | --- |
@@ -135,12 +137,12 @@ Terminal colors: cyan for paths and information, green for success or running in
 
 ## Uninstall
 
-Replace `/path/to/trackio_manager` below with your actual project directory.
+Replace `/path/to/tracknest` below with your actual project directory.
 
 1. Stop the application using the same system account and storage environment variables as startup:
 
    ```bash
-   cd /path/to/trackio_manager
+   cd /path/to/tracknest
    ./stop.sh
    ```
 
@@ -157,7 +159,7 @@ Replace `/path/to/trackio_manager` below with your actual project directory.
 
    ```bash
    cd ..
-   rm -rf -- /path/to/trackio_manager
+   rm -rf -- /path/to/tracknest
    ```
 
 Storage directories outside the project and external backups remain. Delete them separately only if you also want to remove that data. System Python and Nginx do not need to be uninstalled.
