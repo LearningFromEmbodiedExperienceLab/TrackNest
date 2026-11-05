@@ -8,7 +8,7 @@
 
 本方案按以下前提设计：单台 Linux 服务器、一个管理应用副本、SQLite 和实验文件存放在本机持久化目录，只对外提供 9000 入口。继续保留每位用户的 Panel、管理员邀请注册、项目邀请和成员退出功能。
 
-宿主机环境的完整测试已通过 **79 项**，包括真实 Nginx 代理、存储路径选择、启停脚本、整套部署拷贝和单用户导入导出。这是现有功能的回归基线，**尚未构建或验证 Docker 镜像**；本文的 Docker 部署操作仍未执行。
+宿主机环境的完整测试已通过 **92 项**，包括真实 Nginx 代理、存储路径选择、启停脚本、整套部署拷贝和单用户导入导出。这是现有功能的回归基线，**尚未构建或验证 Docker 镜像**；本文的 Docker 部署操作仍未执行。
 
 目前仓库没有 Dockerfile 或 Compose 配置，因此还不能直接执行 `docker compose up` 部署。
 
@@ -40,7 +40,7 @@
 
 | 项目 | 当前情况 | 建议处理 |
 | --- | --- | --- |
-| 应用镜像 | 依赖本机 `.venv` | 新增 Dockerfile，固定已验证的 Python 基础镜像，安装 `requirements.txt`，包含 `app.py`、`storage_config.py`、`script_output.py`、`data_transfer.py`、`trackio_server.py`、`templates/` 和 `static/` |
+| 应用镜像 | 依赖本机 `.venv` | 新增 Dockerfile，固定已验证的 Python 基础镜像，安装 `requirements.txt`，包含 `app.py`、`storage_config.py`、`script_output.py`、`data_transfer.py`、`personal_projects.py`、`trackio_server.py`、`templates/` 和 `static/` |
 | 构建上下文 | `.gitignore` 不能代替 Docker 构建排除规则 | 新增 `.dockerignore`，排除 `.venv`、实验、管理数据库、备份、凭据和运行日志；保留 `templates/ui/` |
 | Gunicorn | `start.sh` 使用 `--daemon` 和 PID 文件 | 容器内以前台模式运行，保持 `--workers 1 --threads 4 --timeout 60`，绑定 `0.0.0.0:9001` |
 | Nginx 上游 | `127.0.0.1:9001` | 新增容器专用配置，改为 `manager:9001`，保留 Host、限流、上传大小及代理超时配置 |
@@ -129,7 +129,7 @@ Gunicorn 和 Nginx 的访问、错误日志输出到 stdout / stderr，由 Compo
 | 阶段 | 需要验证的内容 | 通过标准 |
 | --- | --- | --- |
 | 镜像构建 | 固定依赖安装、Trackio 启动器、非 root 文件权限、UI 资源完整 | 镜像可启动，无宿主机 `.venv` 或凭据依赖 |
-| 原有回归 | 在测试镜像中运行完整现有测试，包括真实 Nginx 测试 | 基线 79 项通过，不因缺少 Nginx 而跳过集成项；新增项也全部通过 |
+| 原有回归 | 在测试镜像中运行完整现有测试，包括真实 Nginx 测试 | 基线 92 项通过，不因缺少 Nginx 而跳过集成项；新增项也全部通过 |
 | 双容器链路 | 通过 gateway 访问 `/u/`、`/p/`、静态资源及上传接口 | 无 404 / 502，Host、登录限流和来源校验正常 |
 | 注册和团队项目权限 | 管理员邀请注册；创建者邀请已注册成员；编辑、只读、退出、移除与 Token 撤销 | 与现有行为一致，退出或移除后无法继续访问或写入 |
 | 实验记录 | SDK 上报 25 个 iteration 点，读取 loss / accuracy，并访问媒体文件 | 曲线横轴和点数正确，文件可读取，跨用户数据隔离 |

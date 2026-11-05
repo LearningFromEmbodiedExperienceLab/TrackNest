@@ -39,7 +39,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="panel-footnote ui-hint">{{ t('启动后即可打开实验面板。停止实例不会删除实验数据。', 'Start your instance to open the dashboard. Stopping it preserves experiment data.') }}</div>
+            <div class="panel-footnote ui-form-footer"><p class="ui-hint">{{ t('启动后即可打开实验面板。停止实例不会删除实验数据。', 'Start your instance to open the dashboard. Stopping it preserves experiment data.') }}</p><a class="ui-button ui-button--secondary" href="{{ url_for('personal_projects') }}">{{ t('管理实验项目', 'Manage experiment projects') }}</a></div>
         </section>
 
     </div>

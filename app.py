@@ -20,6 +20,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from storage_config import storage_paths
+from personal_projects import project_names
 
 BASE_DIR = Path(__file__).resolve().parent
 STATE_DIR, DATA_ROOT = storage_paths()
@@ -330,7 +331,7 @@ def set_language():
     if language not in ("zh", "en"):
         abort(400)
     target = request.form.get("next", "/")
-    response = redirect(target if target in ("/", "/login", "/admin/users", "/register", "/profile") or re.fullmatch(r"/projects/[a-f0-9]{32}|/register#invite=[A-Za-z0-9_-]{43}", target) else url_for("index"))
+    response = redirect(target if target in ("/", "/login", "/admin/users", "/register", "/profile", "/personal/projects") or re.fullmatch(r"/projects/[a-f0-9]{32}|/register#invite=[A-Za-z0-9_-]{43}", target) else url_for("index"))
     response.set_cookie(
         "tracknest_language", language, max_age=365 * 24 * 60 * 60,
         httponly=True, samesite="Lax", secure=app.config["SESSION_COOKIE_SECURE"],
@@ -361,6 +362,48 @@ def logout():
 def index():
     memberships = ProjectMember.query.filter_by(user_id=g.user.id).all()
     return render_template("index.html", users=[g.user], memberships=memberships)
+
+
+@app.get("/personal/projects")
+def personal_projects():
+    with instance_lock():
+        db.session.refresh(g.user)
+        try:
+            projects = project_names(Path(g.user.data_dir))
+        except (OSError, ValueError):
+            app.logger.exception("Could not list personal experiment projects")
+            abort(500, t("无法读取个人实验项目，请检查管理日志", "Could not list personal projects. Check the management log"))
+        return render_template("personal_projects.html", projects=projects, running=is_running(g.user))
+
+
+@app.post("/personal/projects/delete")
+def delete_personal_project():
+    with instance_lock():
+        # Authentication happened before taking the lock; reload any concurrent start.
+        db.session.refresh(g.user)
+        if is_running(g.user):
+            abort(409, t("请先停止个人实例并暂停训练上报，再删除实验项目", "Stop your personal instance and pause training uploads before deleting a project"))
+        name = request.form.get("project", "")
+        try:
+            projects = project_names(Path(g.user.data_dir))
+        except (OSError, ValueError):
+            app.logger.exception("Could not list personal experiment projects")
+            abort(500, t("无法读取个人实验项目，请检查管理日志", "Could not list personal projects. Check the management log"))
+        if name not in projects:
+            abort(404, t("个人实验项目不存在", "Personal experiment project not found"))
+        if request.form.get("confirm_name") != name:
+            abort(400, t("请输入完整且一致的项目名确认删除", "Enter the exact project name to confirm deletion"))
+        try:
+            result = subprocess.run([sys.executable, str(BASE_DIR / "personal_projects.py"), g.user.data_dir, name],
+                                    capture_output=True, text=True)
+            if result.returncode:
+                app.logger.error("Personal project deletion failed: %s", result.stderr)
+                abort(500, t("删除未完成，部分文件可能已删除。请检查管理日志及剩余数据", "Deletion did not complete; some files may have been removed. Check the management log and remaining data"))
+        except OSError:
+            app.logger.exception("Could not start personal project deletion")
+            abort(500, t("无法启动删除操作，请检查管理日志", "Could not start deletion. Check the management log"))
+    flash(t("已永久删除个人实验项目 {name}", "Permanently deleted personal experiment project {name}", name=name))
+    return redirect(url_for("personal_projects"))
 
 
 def require_admin():

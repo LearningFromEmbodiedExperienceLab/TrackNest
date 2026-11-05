@@ -67,6 +67,12 @@ tail -f instance/gunicorn-error.log
 
 `status.sh` exits with code 0 when both HTTP endpoints are healthy and no instance has stopped unexpectedly; otherwise it exits with code 1. Intentionally stopped experiment instances are not considered failures. Access logs are in `instance/gunicorn-access.log`. Each experiment instance stores startup and error logs in `server.log` in its data directory. With a custom `MANAGER_STATE_DIR`, management PID files and logs are also stored there.
 
+## Delete a personal experiment project
+
+In the Panel, choose **Manage experiment projects** under Personal experiment space. Pause training uploads and stop your personal instance, expand the project, enter its exact name, then confirm **Permanently delete project data**. This removes its runs, metrics, media, artifacts and local trace data. Other personal projects and team projects are unaffected. Logging to the same name later creates the project again.
+
+This differs from deleting a team project, which revokes memberships but retains experiment files.
+
 ## Data storage
 
 The default root is `<path-to>/tracknest`:
