@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}{{ t('个人资料', 'Profile') }}{% endblock %}
+{% block page_class %}profile-shell{% endblock %}
 {% block content %}
 <div class="page-heading"><div><a class="ui-hint" href="{{ url_for('index') }}">← {{ t('返回我的空间', 'Back to my panel') }}</a><h1>{{ t('个人资料', 'Profile') }}</h1></div></div>
 <section class="ui-panel">
-    <form class="panel-body form-stack" action="{{ url_for('profile') }}" method="post">
+    <form class="ui-panel-body ui-stack" action="{{ url_for('profile') }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label class="field" for="profile-username">{{ t('用户名', 'Username') }}<input id="profile-username" class="ui-input" value="{{ g.user.username }}" readonly></label>
+        <div class="ui-field"><span class="ui-muted">{{ t('用户名', 'Username') }}</span><span class="user-name ui-mono">{{ g.user.username }}</span></div>
         <p class="ui-hint">{{ t('用户名用于登录，由管理员修改。昵称仅用于显示，可随时修改。', 'Your username is used to sign in and can be changed by an administrator. You can change your display nickname at any time.') }}</p>
-        <label class="field" for="profile-nickname">{{ t('昵称（可选）', 'Nickname (optional)') }}<input id="profile-nickname" class="ui-input" name="nickname" value="{{ g.user.nickname }}" maxlength="64"></label>
-        <div class="form-footer"><button class="ui-button" type="submit">{{ t('更新昵称', 'Update nickname') }}</button></div>
+        <label class="ui-field" for="profile-nickname">{{ t('昵称（可选）', 'Nickname (optional)') }}<input id="profile-nickname" class="ui-input" name="nickname" value="{{ g.user.nickname }}" maxlength="64"></label>
+        <div class="ui-form-footer"><button class="ui-button" type="submit">{{ t('更新昵称', 'Update nickname') }}</button></div>
     </form>
 </section>
 {% endblock %}

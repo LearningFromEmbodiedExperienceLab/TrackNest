@@ -8,12 +8,12 @@
 </div>
 <section class="ui-panel" aria-labelledby="login-title">
     <div class="ui-pane-heading"><h2 class="panel-title" id="login-title">{{ t('账号登录', 'Sign in') }}</h2></div>
-    <form class="panel-body form-stack" method="post" action="{{ url_for('login') }}">
+    <form class="ui-panel-body ui-stack" method="post" action="{{ url_for('login') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label class="field" for="username">{{ t('用户名', 'Username') }}
+        <label class="ui-field" for="username">{{ t('用户名', 'Username') }}
             <input id="username" class="ui-input" name="username" placeholder="{{ t('输入用户名', 'Enter your username') }}" autocomplete="username" maxlength="64" required>
         </label>
-        <label class="field" for="password">{{ t('密码', 'Password') }}
+        <label class="ui-field" for="password">{{ t('密码', 'Password') }}
             <input id="password" class="ui-input" name="password" type="password" placeholder="{{ t('输入密码', 'Enter your password') }}" autocomplete="current-password" required>
         </label>
         <button class="ui-button" type="submit">{{ t('登录个人空间', 'Sign in to your workspace') }} <span aria-hidden="true">↗</span></button>

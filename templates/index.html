@@ -15,15 +15,15 @@
                 <h2 class="panel-title" id="instances-title">{{ t('个人实验空间', 'Personal experiment space') }}</h2>
                 <span class="ui-pane-heading-meta">{{ users|length }} {{ t('个实例', 'instance' if users|length == 1 else 'instances') }}</span>
             </div>
-            <div class="table-scroll">
-                <table class="instance-table">
+            <div class="ui-table-wrap">
+                <table class="ui-table">
                     <thead><tr><th scope="col">{{ t('用户', 'User') }}</th><th scope="col">{{ t('状态', 'Status') }}</th><th scope="col" class="actions-heading">{{ t('操作', 'Actions') }}</th></tr></thead>
                     <tbody>
                     {% for u in users %}
                     {% set running = is_running(u) %}
                     <tr>
-                        <td><span class="user-name ui-mono">{{ u.username }}</span>{% if u.id == g.user.id %}<span class="self-label ui-hint">{{ t('本人', 'You') }}</span>{% endif %}</td>
-                        <td><span class="instance-status {{ 'is-running' if running else '' }}"><span class="status-dot" aria-hidden="true"></span>{{ t('运行中', 'Running') if running else t('已停止', 'Stopped') }}</span></td>
+                        <td><span class="user-name ui-mono">{{ u.username }}</span></td>
+                        <td><span class="ui-status {{ 'ui-status--active' if running else '' }}">{{ t('运行中', 'Running') if running else t('已停止', 'Stopped') }}</span></td>
                         <td>
                             <div class="row-actions">
                                 {% if running and u.id == g.user.id %}<a class="ui-button ui-button--secondary" href="/u/{{ u.username }}/?x_axis=iteration" target="_blank" rel="noopener">{{ t('实验面板', 'Dashboard') }} ↗</a>{% endif %}
@@ -45,14 +45,14 @@
     </div>
     <section class="ui-panel connection-panel" aria-labelledby="connection-title">
         <div class="ui-pane-heading"><h2 class="panel-title" id="connection-title">{{ t('我的训练接入', 'Connect your training') }}</h2></div>
-        <div class="panel-body form-stack">
+        <div class="ui-panel-body ui-stack">
             <p class="ui-hint">{{ t('先启动实例，再在训练机器设置环境变量。', 'Start your instance, then set these environment variables on your training machine.') }}</p>
             <div><h3 class="step-heading ui-kicker">01 / {{ t('配置环境变量', 'Set environment variables') }}</h3>
-                <pre class="code-block"><code>export TRACKIO_SERVER_URL="{{ request.host_url }}u/{{ g.user.username }}/"
+                <pre class="ui-code"><code>export TRACKIO_SERVER_URL="{{ request.host_url }}u/{{ g.user.username }}/"
 export TRACKIO_WRITE_TOKEN="{{ g.user.write_token }}"</code></pre>
             </div>
-            <div><h3 class="step-heading ui-kicker">02 / {{ t('记录实验', 'Log your experiment') }}</h3>
-                <pre class="code-block"><code>import trackio
+            <details class="ui-disclosure"><summary>{{ t('训练代码示例 · 25 次迭代', 'Training example · 25 iterations') }}</summary><div class="ui-disclosure-body">
+                <pre class="ui-code"><code>import trackio
 
 trackio.init(project="my-project", name="baseline")
 for iteration in range(1, 26):
@@ -62,7 +62,7 @@ for iteration in range(1, 26):
         "accuracy": 1.0 - 1.0 / (iteration + 1),
     }, step=iteration)
 trackio.finish()</code></pre>
-            </div>
+            </div></details>
             <p class="credential-note ui-hint">{{ t('Token 可读写你空间内的全部实验，请妥善保管。', 'Your token grants read and write access to all your experiments. Keep it private.') }}</p>
         </div>
     </section>

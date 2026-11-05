@@ -6,12 +6,12 @@
     <h1>{{ t('邀请链接已生成', 'Invitation link ready') }}</h1>
     <p class="ui-muted">{{ t('请将链接发送给用户 {username}，由对方自行设置密码。', 'Send this link to {username} so they can set their own password.', username=user.username) }}</p>
 </div>
-<section class="ui-panel panel-body form-stack">
-    <label class="field" for="invitation-url">{{ t('邀请注册链接', 'Registration invitation') }}
+<section class="ui-panel ui-panel-body ui-stack">
+    <label class="ui-field" for="invitation-url">{{ t('邀请注册链接', 'Registration invitation') }}
         <input id="invitation-url" class="ui-input ui-mono" readonly value="{{ invitation_url }}" onclick="this.select()">
     </label>
     <p class="ui-hint">{{ t('链接 7 天内有效，仅可使用一次。重新生成会撤销旧链接。', 'Valid for 7 days and one use. Regenerating revokes the previous link.') }}</p>
-    <div class="form-footer">
+    <div class="ui-form-footer">
         <a class="ui-button ui-button--secondary" href="{{ url_for('admin_users') }}">{{ t('返回用户管理', 'Back to user management') }}</a>
         <button id="copy-invitation" class="ui-button" type="button" data-success="{{ t('链接已复制', 'Link copied') }}" data-error="{{ t('复制失败，请选中链接后手动复制。', 'Copy failed. Select the link and copy it manually.') }}">{{ t('复制链接', 'Copy link') }}</button>
     </div>

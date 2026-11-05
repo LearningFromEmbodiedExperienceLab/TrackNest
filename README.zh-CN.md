@@ -135,6 +135,48 @@ tail -f instance/gunicorn-error.log
 
 终端颜色：青色为路径及提示，绿色为成功或运行中，黄色为已停止或提醒，红色为错误或异常。重定向输出时自动关闭颜色，也可设置 `NO_COLOR=1` 禁用颜色。三个脚本都支持 `--help`。
 
+## 拉取更新和升级
+
+在实际运行 TrackNest 的机器上操作，使用与启动时相同的系统账号和存储环境变量。请将 `/path/to/tracknest` 替换为实际项目目录。
+
+1. 检查本地改动；需要保留的修改请先提交或另行保存：
+
+   ```bash
+   cd /path/to/tracknest
+   git status --short
+   ```
+
+2. 暂停训练上报，停止应用：
+
+   ```bash
+   ./stop.sh
+   ```
+
+   确认停机成功后，将脚本打印的实际状态目录和数据目录备份到项目目录之外，保留符号链接。备份需包含 `manager.db`、`secret.key` 和实验文件；如有 `.storage.json`，也请保留。
+
+3. 拉取代码并更新依赖。每条命令成功后再继续；如果 Git 提示本地改动冲突或分支分叉，先处理再升级：
+
+   ```bash
+   git pull --ff-only
+   .venv/bin/pip install -r requirements.txt
+   ```
+
+4. 使用原来的存储参数启动并检查状态。默认存储位置执行：
+
+   ```bash
+   ./start.sh
+   ./status.sh
+   ```
+
+   自定义存储位置则改用下方命令，并将路径替换为原有存储根目录：
+
+   ```bash
+   ./start.sh --storage-dir /mnt/trackio-storage
+   ./status.sh
+   ```
+
+启动时会执行已支持的管理数据库升级。保留原数据和签名密钥，无需重新创建管理员；实验实例按需从 Panel 启动。如果新版本修改了 Nginx 配置，请按“首次安装”更新已安装的配置并检查、重载 Nginx。
+
 ## 卸载
 
 请将下方 `/path/to/tracknest` 替换为实际项目目录。

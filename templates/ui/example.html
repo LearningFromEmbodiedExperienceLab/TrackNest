@@ -1,71 +1,85 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>UI kit</title>
+  <title>UI kit · Component reference</title>
   <link rel="stylesheet" href="ui.css">
-  <script>document.documentElement.setAttribute("data-theme", /^(dark|ink)$/.test(localStorage.getItem("ui-theme")||"") ? "dark" : "light");</script>
+  <script>
+    try { document.documentElement.dataset.theme = localStorage.getItem('ui-theme') === 'dark' ? 'dark' : 'light'; } catch (error) {}
+  </script>
   <style>
-    body { padding: var(--ui-space-4); }
-    main { max-width: 720px; margin: auto; display: grid; gap: var(--ui-space-3); }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-2); }
-    .ui-panel { padding: var(--ui-space-3); }
-    .row { display: flex; flex-wrap: wrap; gap: var(--ui-space-1); }
+    body { padding: 32px 20px; }
+    main { max-width: 880px; margin: auto; display: grid; gap: 24px; }
+    h1 { margin: 4px 0 8px; font-size: 28px; font-weight: 550; letter-spacing: -.035em; }
+    h2, p { margin-top: 0; }
+    .example-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .example-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .example-grid > * { min-width: 0; }
+    @media (max-width: 600px) { .example-grid { grid-template-columns: minmax(0, 1fr); } }
   </style>
 </head>
 <body>
-  <main>
-    <div class="toolbar">
-      <div>
-        <p class="ui-kicker">UI KIT</p>
-        <h1 style="margin: 8px 0 0; font-size: 28px;">文档工具界面</h1>
+<main>
+  <header class="example-header">
+    <div><p class="ui-kicker">COMPONENT REFERENCE / 组件参考</p><h1>Quiet, useful interfaces.</h1><p class="ui-hint">Warm neutrals, clear hierarchy, small radii. 暖灰配色，清晰层级，小圆角。</p></div>
+    <button id="theme" class="ui-theme-toggle" type="button" aria-label="Switch theme">
+      <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16A8 8 0 0 0 12 4Z" fill="currentColor"/></svg>
+    </button>
+  </header>
+  <section class="ui-panel">
+    <div class="ui-pane-heading"><h2>Actions / 操作</h2><span class="ui-pane-heading-meta">One primary action per task</span></div>
+    <div class="ui-panel-body ui-stack">
+      <div class="ui-actions">
+        <button class="ui-button" type="button">Primary action</button>
+        <a class="ui-button ui-button--secondary" href="#forms">Link button</a>
+        <button class="ui-button ui-button--ghost" type="button">Text action</button>
+        <button class="ui-button ui-button--danger" type="button">Delete</button>
+        <button class="ui-button" type="button" disabled>Unavailable</button>
       </div>
-      <button id="theme" class="ui-theme-toggle" type="button" aria-label="切换为深色模式">
-        <svg class="ui-icon" data-theme-icon="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-        <svg class="ui-icon" data-theme-icon="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-      </button>
+      <p class="ui-hint">Links and buttons share dimensions. Disabled actions stay visibly inactive.</p>
     </div>
-    <section class="ui-panel">
-      <p class="ui-hint">这是独立于业务逻辑的样式示例。换主题只改颜色，不改组件结构。</p>
-      <p class="row">
-        <button class="ui-button" type="button">主要操作</button>
-        <button class="ui-button ui-button--secondary" type="button">次要操作</button>
-        <button class="ui-button ui-button--ghost" type="button">文字操作</button>
-        <button class="ui-button ui-button--danger" type="button">危险操作</button>
-      </p>
-      <p class="ui-kicker" style="margin-top: var(--ui-space-2);">分段切换</p>
-      <div class="ui-segment" style="max-width: 240px;">
-        <button class="ui-segment__btn ui-segment__btn--active" type="button">选项 A</button>
-        <button class="ui-segment__btn" type="button">选项 B</button>
+  </section>
+  <section class="ui-panel" id="forms">
+    <div class="ui-pane-heading"><h2>Forms / 表单</h2></div>
+    <div class="ui-panel-body ui-stack">
+      <div class="example-grid">
+        <label class="ui-field">Display name / 昵称<input class="ui-input" placeholder="Your name"></label>
+        <label class="ui-field">Permission / 权限<select class="ui-input"><option>Editor / 编辑</option><option>Viewer / 只读</option></select></label>
+        <label class="ui-field">Read-only / 只读<input class="ui-input" value="account-name" readonly></label>
+        <label class="ui-field">Disabled / 禁用<input class="ui-input" value="Not available" disabled></label>
       </div>
-      <p class="ui-kicker" style="margin-top: var(--ui-space-2);">选项芯片</p>
-      <div class="ui-chip-group">
-        <button class="ui-chip ui-chip--active" type="button">自由</button>
-        <button class="ui-chip" type="button">1:1</button>
-        <button class="ui-chip" type="button">4:3</button>
-        <button class="ui-chip" type="button">16:9</button>
-      </div>
-      <label class="ui-hint" for="sample">正文</label>
-      <textarea id="sample" class="ui-textarea" rows="5" placeholder="# Document title"></textarea>
-    </section>
-    <section class="ui-panel ui-prose">
-      <h1>预览排版</h1>
-      <p>正文使用系统无衬线字体；元信息使用等宽字体。</p>
-      <blockquote>控件小圆角，主按钮实底，避免渐变和大阴影。</blockquote>
-    </section>
-  </main>
-  <script>
-    const root = document.documentElement;
-    const btn = document.getElementById("theme");
-    const dark = () => root.getAttribute("data-theme") === "dark";
-    function sync() { btn.setAttribute("aria-label", dark() ? "切换为浅色模式" : "切换为深色模式"); }
-    sync();
-    btn.addEventListener("click", () => {
-      root.setAttribute("data-theme", dark() ? "light" : "dark");
-      localStorage.setItem("ui-theme", root.getAttribute("data-theme"));
-      sync();
-    });
-  </script>
+      <label class="ui-field">Notes / 备注<textarea class="ui-textarea" rows="3" placeholder="Optional notes"></textarea></label>
+      <label class="ui-check"><input type="checkbox">A longer checkbox label stays readable on small screens. 较长说明在手机上自动换行。</label>
+      <div class="ui-form-footer"><p class="ui-hint">Supporting text belongs next to the task.</p><button class="ui-button" type="button">Save changes</button></div>
+    </div>
+  </section>
+  <section class="ui-panel">
+    <div class="ui-pane-heading"><h2>Lists and states / 列表与状态</h2><span class="ui-pane-heading-meta">2 items</span></div>
+    <div class="ui-table-wrap"><table class="ui-table">
+      <thead><tr><th scope="col">Name</th><th scope="col">Status</th><th scope="col">Role</th></tr></thead>
+      <tbody><tr><td>Example workspace</td><td><span class="ui-status ui-status--active">Running</span></td><td>Owner</td></tr><tr><td>Another workspace</td><td><span class="ui-status">Stopped</span></td><td>Editor</td></tr></tbody>
+    </table></div>
+    <div class="ui-panel-body ui-stack">
+      <p class="ui-notice" role="status">Changes saved. This notice also handles long text without forcing the page wider.</p>
+      <p class="ui-notice ui-notice--danger" role="alert">The action could not be completed. 请检查后重试。</p>
+    </div>
+  </section>
+  <section class="ui-panel ui-panel-body ui-stack">
+    <details class="ui-disclosure"><summary>Advanced options / 高级选项</summary><div class="ui-disclosure-body ui-stack"><p class="ui-hint">Native disclosure: keyboard accessible, no JavaScript required.</p><pre class="ui-code"><code>example.configure({ theme: "light" })</code></pre></div></details>
+    <div class="ui-segment" role="group" aria-label="Example display modes"><button class="ui-segment__btn ui-segment__btn--active" type="button">Overview</button><button class="ui-segment__btn" type="button">Details</button></div>
+    <div class="ui-chip-group"><button class="ui-chip ui-chip--active" type="button">All</button><button class="ui-chip" type="button">Recent</button><button class="ui-chip" type="button" disabled>Unavailable</button></div>
+  </section>
+  <section class="ui-panel ui-panel-body ui-prose">
+    <h1>Typography / 排版</h1><p>Use one clear heading, short supporting text, and a restrained number of surfaces.</p><blockquote>Keep the interface quiet; let the content carry the hierarchy.</blockquote><p>正文使用系统无衬线字体，代码使用等宽字体。避免渐变、大阴影和过多装饰性卡片。</p>
+  </section>
+</main>
+<script>
+  document.getElementById('theme').addEventListener('click', () => {
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem('ui-theme', theme); } catch (error) {}
+  });
+</script>
 </body>
 </html>

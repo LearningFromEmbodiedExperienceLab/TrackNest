@@ -135,6 +135,48 @@ Scripts output English by default. Add `--lang zh` for Chinese; this can be comb
 
 Terminal colors: cyan for paths and information, green for success or running instances, yellow for stopped instances or warnings, and red for errors or unexpected failures. Colors are automatically disabled when output is redirected. Set `NO_COLOR=1` to disable them explicitly. All three scripts support `--help`.
 
+## Upgrade
+
+Run these steps on the machine hosting TrackNest, using the same system account and storage environment variables as startup. Replace `/path/to/tracknest` with your project directory.
+
+1. Check for local changes. Commit or otherwise save any changes you want to keep before pulling:
+
+   ```bash
+   cd /path/to/tracknest
+   git status --short
+   ```
+
+2. Pause training uploads and stop the application:
+
+   ```bash
+   ./stop.sh
+   ```
+
+   Confirm shutdown succeeded, then back up the actual state and data directories printed by the script to a location outside the project, preserving symlinks. Include `manager.db`, `secret.key`, and experiment files; also keep `.storage.json` if present.
+
+3. Pull updates and install dependencies. Continue only when each command succeeds; if Git reports local changes or diverging branches, resolve them before proceeding:
+
+   ```bash
+   git pull --ff-only
+   .venv/bin/pip install -r requirements.txt
+   ```
+
+4. Start with your original storage options and check status. For default storage:
+
+   ```bash
+   ./start.sh
+   ./status.sh
+   ```
+
+   For custom storage, use this instead, replacing the path with your existing storage root:
+
+   ```bash
+   ./start.sh --storage-dir /mnt/trackio-storage
+   ./status.sh
+   ```
+
+Startup applies supported management database updates. Keep the existing data and signing key; do not recreate the administrator. Start experiment instances from the Panel when needed. If the release changes Nginx configuration, update the installed configuration and test/reload Nginx as described in First-time setup.
+
 ## Uninstall
 
 Replace `/path/to/tracknest` below with your actual project directory.

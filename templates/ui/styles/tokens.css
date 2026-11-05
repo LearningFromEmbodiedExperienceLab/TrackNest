@@ -11,6 +11,9 @@
   --ui-space-3: 24px;
   --ui-space-4: 32px;
   --ui-space-5: 48px;
+  --ui-control-height: 40px;
+  --ui-text-sm: 12px;
+  --ui-text-body: 14px;
   --ui-duration: 150ms;
 }
 

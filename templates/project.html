@@ -13,9 +13,9 @@
     <div class="workspace-main">
         <section class="ui-panel" aria-labelledby="project-instance-title">
             <div class="ui-pane-heading"><h2 class="panel-title" id="project-instance-title">{{ t('项目实例', 'Project instance') }}</h2><span class="ui-pane-heading-meta">{{ t('运行中', 'Running') if running else t('已停止', 'Stopped') }}</span></div>
-            <div class="panel-body form-stack">
+            <div class="ui-panel-body ui-stack">
                 <p class="ui-hint">{{ t('项目成员使用同一个实验面板。个人空间的数据不会自动迁入。', 'Members share this dashboard. Personal experiments are not moved into this project automatically.') }}</p>
-                <div class="form-footer">
+                <div class="ui-form-footer">
                     {% if running %}<a class="ui-button ui-button--secondary" href="{{ project.backend_path }}/?project={{ project.name }}&amp;x_axis=iteration" target="_blank" rel="noopener">{{ t('打开实验面板', 'Open dashboard') }} ↗</a>{% else %}<span class="ui-hint">{{ t('请所有者启动项目实例。', 'Ask the owner to start this instance.') }}</span>{% endif %}
                     {% if membership.role == 'owner' %}
                     <form action="{{ url_for('manage_project_instance', project_id=project.id) }}" method="post">
@@ -29,8 +29,8 @@
         </section>
         <section class="ui-panel" aria-labelledby="members-title">
             <div class="ui-pane-heading"><h2 class="panel-title" id="members-title">{{ t('项目成员', 'Project members') }}</h2><span class="ui-pane-heading-meta">{{ members|length }}</span></div>
-            <div class="table-scroll">
-                <table class="instance-table">
+            <div class="ui-table-wrap">
+                <table class="ui-table">
                     <thead><tr><th scope="col">{{ t('用户', 'User') }}</th><th scope="col">{{ t('权限', 'Role') }}</th>{% if membership.role == 'owner' %}<th scope="col">{{ t('操作', 'Actions') }}</th>{% endif %}</tr></thead>
                     <tbody>
                     {% for m in members %}
@@ -41,7 +41,7 @@
                             <form class="row-actions" action="{{ url_for('set_project_member', project_id=project.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="username" value="{{ m.user.username }}">
-                                <select class="role-select" name="role" aria-label="{{ t('成员权限', 'Member role') }} {{ m.user.username }}" onchange="this.form.requestSubmit()">
+                                <select class="ui-input member-role" name="role" aria-label="{{ t('成员权限', 'Member role') }} {{ m.user.username }}" onchange="this.form.requestSubmit()">
                                     <option value="viewer" {{ 'selected' if m.role == 'viewer' else '' }}>{{ t('只读', 'Viewer') }}</option>
                                     <option value="editor" {{ 'selected' if m.role == 'editor' else '' }}>{{ t('编辑', 'Editor') }}</option>
                                 </select>
@@ -60,27 +60,27 @@
                 </table>
             </div>
             {% if membership.role == 'owner' %}
-            <form class="panel-body form-stack" action="{{ url_for('set_project_member', project_id=project.id) }}" method="post">
+            <form class="ui-panel-body ui-stack" action="{{ url_for('set_project_member', project_id=project.id) }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <label class="field" for="member-username">{{ t('邀请已注册用户', 'Invite a registered user') }}<select id="member-username" class="ui-input" name="username" required><option value="">{{ t('选择用户', 'Choose a user') }}</option>{% for candidate in candidates %}<option value="{{ candidate.username }}">{{ candidate.display_name }}</option>{% endfor %}</select></label>
-                <div class="form-footer">
-                    <label class="field" for="member-role">{{ t('权限', 'Role') }}<select id="member-role" class="role-select" name="role"><option value="viewer">{{ t('只读', 'Viewer') }}</option><option value="editor">{{ t('编辑', 'Editor') }}</option></select></label>
+                <label class="ui-field" for="member-username">{{ t('邀请已注册用户', 'Invite a registered user') }}<select id="member-username" class="ui-input" name="username" required><option value="">{{ t('选择用户', 'Choose a user') }}</option>{% for candidate in candidates %}<option value="{{ candidate.username }}">{{ candidate.display_name }}</option>{% endfor %}</select></label>
+                <div class="ui-form-footer">
+                    <label class="ui-field" for="member-role">{{ t('权限', 'Role') }}<select id="member-role" class="ui-input member-role" name="role"><option value="viewer">{{ t('只读', 'Viewer') }}</option><option value="editor">{{ t('编辑', 'Editor') }}</option></select></label>
                     <button class="ui-button" type="submit">{{ t('添加成员', 'Add member') }}</button>
                 </div>
             </form>
             {% endif %}
         </section>
         {% if membership.role == 'owner' %}
-        <section class="ui-panel">
-            <form class="panel-body form-footer" action="{{ url_for('delete_project', project_id=project.id) }}" method="post" data-confirm="{{ t('删除团队项目并撤销所有成员权限？实验数据目录将保留。', 'Delete this team project and revoke all access? Experiment data will be retained.') }}" onsubmit="return confirm(this.dataset.confirm)">
+        <section class="ui-panel danger-section">
+            <form class="ui-panel-body ui-form-footer" action="{{ url_for('delete_project', project_id=project.id) }}" method="post" data-confirm="{{ t('删除团队项目并撤销所有成员权限？实验数据目录将保留。', 'Delete this team project and revoke all access? Experiment data will be retained.') }}" onsubmit="return confirm(this.dataset.confirm)">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <p class="ui-hint">{{ t('删除后所有成员与 Token 将失去访问权限。', 'Deleting the project revokes access for all members and tokens.') }}</p>
                 <button class="ui-button ui-button--danger" type="submit">{{ t('删除团队项目', 'Delete team project') }}</button>
             </form>
         </section>
         {% else %}
-        <section class="ui-panel">
-            <form class="panel-body form-footer" action="{{ url_for('leave_project', project_id=project.id) }}" method="post" data-confirm="{{ t('退出团队项目？你的项目 Token 将失效，重新加入需要所有者再次邀请。', 'Leave this team project? Your project token will be revoked. The owner must invite you again to rejoin.') }}" onsubmit="return confirm(this.dataset.confirm)">
+        <section class="ui-panel danger-section">
+            <form class="ui-panel-body ui-form-footer" action="{{ url_for('leave_project', project_id=project.id) }}" method="post" data-confirm="{{ t('退出团队项目？你的项目 Token 将失效，重新加入需要所有者再次邀请。', 'Leave this team project? Your project token will be revoked. The owner must invite you again to rejoin.') }}" onsubmit="return confirm(this.dataset.confirm)">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <p class="ui-hint">{{ t('退出不会删除已提交的实验，也不会影响其他成员。', 'Leaving preserves your submitted experiments and does not affect other members.') }}</p>
                 <button class="ui-button ui-button--danger" type="submit">{{ t('退出团队项目', 'Leave team project') }}</button>
@@ -90,12 +90,13 @@
     </div>
     <section class="ui-panel" aria-labelledby="shared-connection-title">
         <div class="ui-pane-heading"><h2 class="panel-title" id="shared-connection-title">{{ t('我的项目凭据', 'My project credentials') }}</h2></div>
-        <div class="panel-body form-stack">
+        <div class="ui-panel-body ui-stack">
             <p class="ui-hint">{{ t('只读凭据可读取实验，不能上报训练或修改数据。', 'Viewer credentials can read experiments but cannot log training or change data.') if membership.role == 'viewer' else t('使用本人的项目 Token 上报训练。请先启动项目实例。', 'Use your own project token to log training. Start the project instance first.') }}</p>
-            <pre class="code-block"><code>export TRACKIO_SERVER_URL="{{ request.host_url }}p/{{ project.id }}/"
+            <pre class="ui-code"><code>export TRACKIO_SERVER_URL="{{ request.host_url }}p/{{ project.id }}/"
 export TRACKIO_WRITE_TOKEN="{{ membership.token }}"</code></pre>
             {% if membership.role != 'viewer' %}
-            <pre class="code-block"><code>import trackio
+            <details class="ui-disclosure"><summary>{{ t('训练代码示例 · 25 次迭代', 'Training example · 25 iterations') }}</summary><div class="ui-disclosure-body">
+            <pre class="ui-code"><code>import trackio
 
 trackio.init(project="{{ project.name }}", name="baseline")
 for iteration in range(1, 26):
@@ -105,6 +106,7 @@ for iteration in range(1, 26):
         "accuracy": 1.0 - 1.0 / (iteration + 1),
     }, step=iteration)
 trackio.finish()</code></pre>
+            </div></details>
             {% endif %}
             <form action="{{ url_for('rotate_project_token', project_id=project.id) }}" method="post" data-confirm="{{ t('重置后原 Token 会立即失效，训练脚本需要更新。继续？', 'Reset your token? Existing training scripts will need the new token.') }}" onsubmit="return confirm(this.dataset.confirm)">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
