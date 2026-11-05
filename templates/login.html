@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('登录', 'Sign in') }}{% endblock %}
+{% block page_class %}login-shell{% endblock %}
+{% block content %}
+<div class="login-heading">
+    <h1>{{ t('回到你的实验空间', 'Back to your experiments') }}</h1>
+    <p class="ui-muted">{{ t('记录每次训练，找到下一次突破。', 'Track every run. Find your next breakthrough.') }}</p>
+</div>
+<section class="ui-panel" aria-labelledby="login-title">
+    <div class="ui-pane-heading"><h2 class="panel-title" id="login-title">{{ t('账号登录', 'Sign in') }}</h2></div>
+    <form class="panel-body form-stack" method="post" action="{{ url_for('login') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="field" for="username">{{ t('用户名', 'Username') }}
+            <input id="username" class="ui-input" name="username" placeholder="{{ t('输入用户名', 'Enter your username') }}" autocomplete="username" maxlength="64" required>
+        </label>
+        <label class="field" for="password">{{ t('密码', 'Password') }}
+            <input id="password" class="ui-input" name="password" type="password" placeholder="{{ t('输入密码', 'Enter your password') }}" autocomplete="current-password" required>
+        </label>
+        <button class="ui-button" type="submit">{{ t('登录个人空间', 'Sign in to your workspace') }} <span aria-hidden="true">↗</span></button>
+        <p class="ui-hint">{{ t('账号由管理员创建。如需开通账号或重置密码，请联系管理员。', 'Contact your administrator to create an account or reset your password.') }}</p>
+    </form>
+</section>
+{% endblock %}

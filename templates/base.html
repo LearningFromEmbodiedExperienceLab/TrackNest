@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="{{ 'en' if g.language == 'en' else 'zh-CN' }}" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ t('工作空间', 'Workspace') }}{% endblock %} · Trackio</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('ui.static', filename='ui.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+    <script>
+        try {
+            document.documentElement.dataset.theme = /^(dark|ink)$/.test(localStorage.getItem('ui-theme') || '') ? 'dark' : 'light';
+        } catch (error) {}
+    </script>
+    <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
+</head>
+<body>
+<header class="site-header">
+    <div class="header-inner">
+        <a class="brand" href="{{ url_for('index') }}" aria-label="{{ t('Trackio 首页', 'Trackio home') }}">
+            <span class="brand-mark" aria-hidden="true">t.</span>
+            <span>trackio</span>
+        </a>
+        <div class="header-actions">
+            {% if g.user and g.user.is_admin %}<a class="ui-hint" href="{{ url_for('admin_users') }}">{{ t('用户管理', 'User management') }}</a>{% endif %}
+            {% if g.user %}
+            <span class="account-label ui-hint"><span class="ui-mono">{{ g.user.username }}</span> / {{ t('管理员', 'Administrator') if g.user.is_admin else t('个人空间', 'Personal workspace') }}</span>
+            {% endif %}
+            <form action="{{ url_for('set_language') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="language" value="{{ 'zh' if g.language == 'en' else 'en' }}">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button id="language" class="ui-button ui-button--ghost" type="submit" lang="{{ 'zh-CN' if g.language == 'en' else 'en' }}" aria-label="{{ t('切换为英文', 'Switch to Chinese') }}">{{ '中文' if g.language == 'en' else 'EN' }}</button>
+            </form>
+            <button id="theme" class="ui-theme-toggle" type="button" aria-label="{{ t('切换为深色模式', 'Switch to dark mode') }}">
+                <svg class="ui-icon" data-theme-icon="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                <svg class="ui-icon" data-theme-icon="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            </button>
+            {% if g.user %}
+            <form action="{{ url_for('logout') }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="ui-button ui-button--ghost" type="submit">{{ t('退出登录', 'Sign out') }}</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</header>
+<main class="page-shell {% block page_class %}{% endblock %}">
+    {% for message in get_flashed_messages() %}<p class="notice ui-panel" role="status">{{ message }}</p>{% endfor %}
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>

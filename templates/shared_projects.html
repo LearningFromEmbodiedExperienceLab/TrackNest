@@ -1,0 +1,28 @@
+<section class="ui-panel" aria-labelledby="shared-title">
+    <div class="ui-pane-heading"><h2 class="panel-title" id="shared-title">{{ t('我的项目', 'My projects') }}</h2><span class="ui-pane-heading-meta">{{ memberships|length }}</span></div>
+    {% if memberships %}
+    <div class="table-scroll">
+        <table class="instance-table">
+            <thead><tr><th scope="col">{{ t('项目', 'Project') }}</th><th scope="col">{{ t('我的权限', 'My role') }}</th><th scope="col">{{ t('状态', 'Status') }}</th></tr></thead>
+            <tbody>
+            {% for m in memberships %}
+            <tr>
+                <td><a href="{{ url_for('project_detail', project_id=m.project_id) }}">{{ m.project.name }}</a><div class="ui-hint">{{ m.project.owner.username }}</div></td>
+                <td>{{ t('所有者', 'Owner') if m.role == 'owner' else (t('编辑', 'Editor') if m.role == 'editor' else t('只读', 'Viewer')) }}</td>
+                <td><span class="instance-status">{{ t('运行中', 'Running') if is_running(m.project) else t('已停止', 'Stopped') }}</span></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="panel-body ui-hint">{{ t('创建一个项目，或请项目所有者添加你的账号。', 'Create a project or ask its owner to add your account.') }}</p>
+    {% endif %}
+    <form class="panel-body form-stack" action="{{ url_for('create_project') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="field" for="project-name">{{ t('新项目名称', 'New project name') }}
+            <input id="project-name" class="ui-input" name="name" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}" placeholder="{{ t('例如 team-baseline', 'e.g. team-baseline') }}" required>
+        </label>
+        <div class="form-footer"><p class="ui-hint">{{ t('创建后仅自己可见，可邀请已注册用户协作。', 'Projects start private. Invite registered users to collaborate.') }}</p><button class="ui-button" type="submit">{{ t('创建项目', 'Create project') }}</button></div>
+    </form>
+</section>

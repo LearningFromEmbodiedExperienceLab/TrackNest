@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('邀请注册', 'Invitation registration') }}{% endblock %}
+{% block page_class %}login-shell{% endblock %}
+{% block content %}
+<div class="login-heading"><h1>{{ t('完成账号注册', 'Complete your registration') }}</h1><p class="ui-muted">{{ t('通过管理员的邀请加入，设置你自己的密码。', 'Join through an administrator invitation and set your own password.') }}</p></div>
+<section class="ui-panel">
+    <form id="registration-form" class="panel-body form-stack" action="{{ url_for('register') }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="token" id="registration-token">
+        <p id="registration-message" class="ui-hint" role="status" data-error="{{ t('邀请链接无效、已使用或已过期，请联系管理员重新生成。', 'This invitation is invalid, already used or expired. Contact your administrator for a new link.') }}">{{ t('正在检查邀请链接…', 'Checking your invitation…') }}</p>
+        <label class="field" for="registration-username">{{ t('用户名', 'Username') }}<input id="registration-username" class="ui-input" readonly autocomplete="username"></label>
+        <label class="field" for="password">{{ t('密码', 'Password') }}<input id="password" class="ui-input" name="password" type="password" minlength="12" autocomplete="new-password" required></label>
+        <label class="field" for="confirm-password">{{ t('确认密码', 'Confirm password') }}<input id="confirm-password" class="ui-input" name="confirm_password" type="password" minlength="12" autocomplete="new-password" required></label>
+        <p class="ui-hint">{{ t('密码至少 12 个字符。', 'Use at least 12 characters.') }}</p>
+        <button id="register-submit" class="ui-button" type="submit" disabled>{{ t('完成注册', 'Complete registration') }}</button>
+        <a class="ui-hint" href="{{ url_for('login') }}">{{ t('返回登录', 'Back to sign in') }}</a>
+    </form>
+</section>
+<script src="{{ url_for('static', filename='register.js') }}" defer></script>
+{% endblock %}

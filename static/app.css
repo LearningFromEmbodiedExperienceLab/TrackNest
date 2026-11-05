@@ -1,0 +1,66 @@
+/* Application layout; components and theme colors come from templates/ui. */
+a { color: inherit; }
+form { margin: 0; }
+h1, h2, h3, p { margin-top: 0; }
+.site-header { border-bottom: 1px solid var(--ui-line); background: var(--ui-panel); }
+.header-inner { max-width: 1328px; min-height: 76px; margin: auto; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; font-size: 21px; font-weight: 600; letter-spacing: -.04em; }
+.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--ui-line-strong); border-radius: var(--ui-radius-sm); font: 600 22px var(--ui-font-mono); }
+.header-actions { display: flex; align-items: center; gap: 20px; }
+.account-label { overflow-wrap: anywhere; }
+.page-shell { max-width: 1328px; margin: auto; padding: 48px 32px; }
+.page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 32px; }
+.page-heading h1, .login-heading h1 { margin: 10px 0; font-size: 30px; font-weight: 550; letter-spacing: -.04em; line-height: 1.4; }
+.page-heading p:last-child { margin-bottom: 0; }
+.workspace-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.workspace-main { display: grid; gap: 24px; min-width: 0; }
+.workspace-grid > section { min-width: 0; }
+.panel-title { margin: 0; font-size: 10px; font-weight: 400; }
+.panel-body { padding: 24px; }
+.form-stack { display: grid; gap: 24px; }
+.form-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.field { display: grid; gap: 8px; font-size: 12px; font-weight: 500; min-width: 0; }
+.form-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.form-footer button { flex-shrink: 0; }
+.table-scroll { overflow-x: auto; }
+.instance-table { border-collapse: collapse; width: 100%; }
+.instance-table th { background: var(--ui-canvas); color: var(--ui-muted); font-size: 11px; font-weight: 400; }
+.instance-table th, .instance-table td { padding: 16px 20px; text-align: left; border-bottom: 1px solid var(--ui-line); }
+.instance-table tbody tr:last-child td { border-bottom: none; }
+.instance-table .actions-heading { text-align: right; }
+.user-name { font-size: 12px; overflow-wrap: anywhere; }
+.self-label { margin-left: 8px; white-space: nowrap; }
+.instance-status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--ui-muted); white-space: nowrap; }
+.status-dot { width: 6px; height: 6px; border: 1px solid var(--ui-fade); border-radius: 50%; }
+.is-running { color: var(--ui-ink); }
+.is-running .status-dot { border-color: var(--ui-ink); background: var(--ui-ink); }
+.row-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.row-actions .ui-button { font-size: 12px; white-space: nowrap; }
+a.ui-button { border: 1px solid var(--ui-line); border-radius: var(--ui-radius-md); text-decoration: none; }
+.panel-footnote { padding: 16px 20px; border-top: 1px solid var(--ui-line); }
+.step-heading { margin-bottom: 12px; }
+.code-block { margin: 0; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-sm); background: var(--ui-canvas); padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.9 var(--ui-font-mono); }
+.credential-note { border-top: 1px solid var(--ui-line); padding-top: 16px; }
+.notice { margin: 0 0 24px; padding: 16px 20px; background: var(--ui-soft); font-size: 13px; }
+.login-shell { max-width: 460px; padding-top: 72px; }
+.login-heading { margin-bottom: 32px; }
+.login-heading h1 { font-size: 28px; }
+@media (max-width: 1050px) {
+    .workspace-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+    .header-inner { padding: 16px; gap: 12px; min-height: 68px; flex-wrap: wrap; }
+    .header-actions { gap: 12px; margin-left: auto; }
+    .account-label { max-width: 130px; font-size: 10px; }
+    .page-shell { padding: 32px 16px; }
+    .page-heading { align-items: flex-start; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+    .page-heading h1 { font-size: 26px; }
+    .panel-body { padding: 20px; }
+    .form-columns { grid-template-columns: 1fr; }
+    .form-footer { align-items: flex-start; flex-direction: column; }
+    .instance-table th, .instance-table td { padding: 12px; }
+    .row-actions { gap: 8px; }
+    .self-label { display: block; margin: 4px 0 0; }
+    .login-shell { padding-top: 48px; }
+}
+.role-select { font: inherit; color: var(--ui-ink); background: var(--ui-panel); border: 1px solid var(--ui-line); border-radius: var(--ui-radius-md); padding: 8px; max-width: 100%; }

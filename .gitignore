@@ -1,0 +1,45 @@
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Test, lint and coverage output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Trackio experiments and manager state (database, tokens, signing key)
+/instance/
+/data/
+secret.key
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Local credentials; keep environment examples versioned
+.env
+.env.*
+!.env.example
+!.env.*.example
+/.aws/
+
+# Runtime output
+*.log
+*.pid
+
+# OS and editor temporary files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+test.py
