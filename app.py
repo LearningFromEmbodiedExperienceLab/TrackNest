@@ -181,14 +181,16 @@ def start_trackio(user):
     user.pid = proc.pid
     db.session.commit()
     deadline = time.monotonic() + 30
-    while time.monotonic() < deadline and proc.poll() is None:
-        try:
-            response = requests.get(f"http://127.0.0.1:{user.port}/version", timeout=1)
-            if response.ok:
-                return
-        except requests.RequestException:
-            pass
-        time.sleep(0.2)
+    with requests.Session() as client:
+        client.trust_env = False
+        while time.monotonic() < deadline and proc.poll() is None:
+            try:
+                response = client.get(f"http://127.0.0.1:{user.port}/version", timeout=1)
+                if response.ok:
+                    return
+            except requests.RequestException:
+                pass
+            time.sleep(0.2)
     if proc.poll() is None:
         os.killpg(proc.pid, signal.SIGTERM)
         try:
@@ -610,7 +612,7 @@ def backend_access(path, method, expected_origin):
         if request.headers.get("Sec-Fetch-Site") == "cross-site" or (origin and origin != expected_origin):
             abort(403)
     if not is_running(user):
-        abort(403)
+        abort(503, t("实验实例未运行，请返回管理面板启动实例", "The experiment instance is not running. Start it from the management panel"))
     return user, user.write_token
 
 
@@ -656,7 +658,7 @@ def shared_project_auth(path, method, expected_origin):
         if not read_api and not read_file:
             abort(403)
     if not is_running(project):
-        abort(403)
+        abort(503, t("实验实例未运行，请返回项目管理页面启动实例", "The experiment instance is not running. Start it from the project management page"))
     return project, project.write_token if member.role != "viewer" else ""
 
 

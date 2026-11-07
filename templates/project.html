@@ -92,11 +92,14 @@
         <div class="ui-pane-heading"><h2 class="panel-title" id="shared-connection-title">{{ t('我的项目凭据', 'My project credentials') }}</h2></div>
         <div class="ui-panel-body ui-stack">
             <p class="ui-hint">{{ t('只读凭据可读取实验，不能上报训练或修改数据。', 'Viewer credentials can read experiments but cannot log training or change data.') if membership.role == 'viewer' else t('使用本人的项目 Token 上报训练。请先启动项目实例。', 'Use your own project token to log training. Start the project instance first.') }}</p>
-            <pre class="ui-code"><code>export TRACKIO_SERVER_URL="{{ request.host_url }}p/{{ project.id }}/"
-export TRACKIO_WRITE_TOKEN="{{ membership.token }}"</code></pre>
+            <p class="ui-hint">{{ t('使用训练环境的 Python，在 TrackNest 仓库目录安装一次客户端，再配置本项目的 URL 和 Token。', 'Install the client once from the TrackNest checkout using your training Python, then configure this project URL and token.') }}</p>
+            <pre class="ui-code"><code>python -m pip install --no-build-isolation --no-deps ./client
+python -m tracknest login --server-url "{{ request.host_url }}p/{{ project.id }}/"</code></pre>
+            <p class="ui-hint">{{ t('按提示输入下方 Token。仅上报连接绕过代理；配置会保存，运行脚本无需进入仓库目录。SSH 隧道仍需保持连接。', 'Enter the token below when prompted. Only uploads bypass proxies. Settings persist and scripts can run from any directory. Keep your SSH tunnel connected.') }}</p>
+            <pre class="ui-code"><code>{{ membership.token }}</code></pre>
             {% if membership.role != 'viewer' %}
             <details class="ui-disclosure"><summary>{{ t('训练代码示例 · 25 次迭代', 'Training example · 25 iterations') }}</summary><div class="ui-disclosure-body">
-            <pre class="ui-code"><code>import trackio
+            <pre class="ui-code"><code>import tracknest as trackio
 
 trackio.init(project="{{ project.name }}", name="baseline")
 for iteration in range(1, 26):

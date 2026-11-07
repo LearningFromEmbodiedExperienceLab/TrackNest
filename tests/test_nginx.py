@@ -1,5 +1,6 @@
 """Optional full-stack test: NGINX_BIN=/path/to/nginx python -m pytest."""
 import html
+import json
 import os
 from pathlib import Path
 import re
@@ -7,6 +8,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 import pytest
@@ -31,6 +33,14 @@ def wait_for(url):
         except requests.RequestException:
             time.sleep(0.1)
     raise AssertionError(f"Server did not become ready: {url}")
+
+
+def training_environment(backend, token, tmp_path):
+    root = Path(tempfile.mkdtemp(dir=tmp_path))
+    config = root / "tracknest/client.json"
+    config.parent.mkdir()
+    config.write_text(json.dumps({"server_url": backend, "token": token}))
+    return {**os.environ, "XDG_CONFIG_HOME": str(root), "PYTHONPATH": str(BASE_DIR / "client")}
 
 
 def test_nginx_login_ingestion_and_isolation(users, tmp_path):
@@ -83,7 +93,7 @@ http {{
             page = browser.post(f"{public}/login", data={"csrf_token": csrf, "username": "alice", "password": "test-password-123"})
             assert page.status_code == 200
             assert f"{public}/u/alice/" in page.text
-            training_example = html.unescape(re.search(r"<code>(import trackio.*?)</code>", page.text, re.S)[1])
+            training_example = html.unescape(re.search(r"<code>(import tracknest.*?)</code>", page.text, re.S)[1])
             page = browser.get(f"{public}/u/alice/")
             assert page.status_code == 200
             assert 'window.__trackio_base = "/u/alice"' in page.text
@@ -100,7 +110,7 @@ http {{
         assert requests.get(f"{public}/u/bob/version", headers=wrong, timeout=5).status_code == 403
         subprocess.run(
             [sys.executable, "-c", training_example.replace('project="my-project"', 'project="private-project"')],
-            env={**os.environ, "TRACKIO_SERVER_URL": f"{public}/u/alice/", "TRACKIO_WRITE_TOKEN": alice.write_token},
+            env=training_environment(f"{public}/u/alice/", alice.write_token, tmp_path),
             check=True, capture_output=True, timeout=30,
         )
         a = RemoteClient(f"{public}/u/alice/", write_token=alice.write_token)
@@ -113,10 +123,12 @@ http {{
         assert [row["step"] for row in logs] == list(range(1, 26))
         assert logs[-1]["loss"] == pytest.approx(1 / 25)
         assert logs[-1]["accuracy"] == pytest.approx(1 - 1 / 26)
+        from test_client import check_persistent_client
+        check_persistent_client(public, alice, tmp_path)
         stop_trackio(alice)
         start_trackio(alice)
         assert "private-project" in a.predict(api_name="/get_all_projects")
-        check_shared_project(public, users)
+        check_shared_project(public, users, tmp_path)
     finally:
         for proc in reversed(procs):
             proc.terminate()
@@ -125,7 +137,7 @@ http {{
         stop_trackio(bob)
 
 
-def check_shared_project(public, users):
+def check_shared_project(public, users, tmp_path):
     from app import db, ProjectMember, SharedProject
 
     def csrf(browser, path):
@@ -159,7 +171,7 @@ def check_shared_project(public, users):
             "csrf_token": csrf(owner, path), "action": "start",
         }, timeout=45)
         assert response.status_code == 200
-        shared_example = html.unescape(re.search(r"<code>(import trackio.*?)</code>", response.text, re.S)[1])
+        shared_example = html.unescape(re.search(r"<code>(import tracknest.*?)</code>", response.text, re.S)[1])
         assert "x_axis=iteration" in response.text
         db.session.expire_all()
         alice_token = db.session.get(ProjectMember, (project_id, users["alice"].id)).token
@@ -169,9 +181,9 @@ def check_shared_project(public, users):
         assert requests.get(backend, headers={"X-Trackio-Write-Token": project.write_token}, timeout=5).status_code == 403
         for run, token in (("alice-run", alice_token), ("bob-run", bob_token)):
             code = shared_example.replace('name="baseline"', f'name="{run}"')
-            subprocess.run([sys.executable, "-c", code], env={
-                **os.environ, "TRACKIO_SERVER_URL": backend, "TRACKIO_WRITE_TOKEN": token,
-            }, check=True, capture_output=True, timeout=30)
+            subprocess.run([sys.executable, "-c", code],
+                           env=training_environment(backend, token, tmp_path),
+                           check=True, capture_output=True, timeout=30)
         shared = RemoteClient(backend, write_token=bob_token)
         assert len(shared.predict("shared-training", api_name="/get_runs_for_project")) == 2
         for run in ("alice-run", "bob-run"):

@@ -55,6 +55,25 @@ sudo nginx -t && sudo systemctl reload nginx
 
 只需对外开放统一入口。创建团队项目或用户后无需修改 Nginx 配置。
 
+## 通过 SSH 转发上报训练
+
+在训练机器保持隧道运行，例如 `ssh -N -L 9000:localhost:9000 PCL-4090-syw`，然后访问 <http://localhost:9000/login>，登录并启动个人或团队实例。个人空间支持多个 project；更换 `trackio.init(project=...)` 的名称时，上报 URL 和 Token 不变。
+
+使用已安装 `trackio==0.45.0` 的训练 Python，在 TrackNest 仓库目录安装一次薄客户端，然后配置一次连接（团队空间使用页面显示的 `/p/<项目ID>/` URL）：
+
+```bash
+python -m pip install --no-build-isolation --no-deps ./client
+python -m tracknest login --server-url http://localhost:9000/u/<用户名>/
+```
+
+按提示输入页面上的 Token。配置保存在 `~/.config/tracknest/client.json`（支持 `XDG_CONFIG_HOME`），文件权限为 `0600`；切换空间或重置 Token 后重新运行 login。无需每次设置 URL、Token 或 NO_PROXY。
+
+训练脚本只需把导入改为 `import tracknest as trackio`，其余 `init/log/finish` 代码保持原样。之后可从任意目录直接运行 `python test.py`，无需进入仓库目录。客户端只对已配置的 TrackNest 连接使用 `trust_env=False`，不修改 HTTP/SOCKS 代理环境变量，不影响训练下载或其他请求。
+
+终端会显示连接验证、已上传的指标条数、结束时的同步等待及结果。服务器不可连接或 Token 无效时，初始化直接报错；训练中断网时保留 Trackio 的本地缓存，并明确提示同步未完成，下次初始化同一 project 时重试。服务器确认的条数是本次进程累计的上报指标条数，也可能包含重传的缓存。
+
+未使用薄客户端的原生 `import trackio` 仍按 Trackio 自身规则工作：没有远端 URL 就只写本地，也不会自动读取上述配置。若设置了 `TRACKIO_SPACE_ID`，需先取消它以使用 TrackNest。管理端对本机实例的启动检查和转发请求会绕过环境代理；实例未运行时返回 503，凭据或权限错误仍返回 401/403。
+
 ## 查看状态和日志
 
 ```bash

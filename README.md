@@ -55,6 +55,25 @@ Open [http://localhost:9000/login](http://localhost:9000/login). For remote acce
 
 Only the shared entry point needs external access. Creating users or team projects does not require changes to Nginx.
 
+## Log training through an SSH tunnel
+
+Keep the tunnel running on the training machine, for example `ssh -N -L 9000:localhost:9000 PCL-4090-syw`. Open [http://localhost:9000/login](http://localhost:9000/login), sign in, and start the personal or team instance. Personal spaces support multiple projects: changing `trackio.init(project=...)` does not change the upload URL or token.
+
+Using your training Python with `trackio==0.45.0` installed, install the thin client once from the TrackNest checkout, then configure the connection once. For team spaces, use the `/p/<project-id>/` URL shown on the project page:
+
+```bash
+python -m pip install --no-build-isolation --no-deps ./client
+python -m tracknest login --server-url http://localhost:9000/u/<username>/
+```
+
+Enter the token from the page when prompted. Settings are saved in `~/.config/tracknest/client.json` (respecting `XDG_CONFIG_HOME`) with mode `0600`. Run login again after changing spaces or rotating the token. No per-terminal URL, token, or NO_PROXY setup is needed.
+
+Change the training import to `import tracknest as trackio`; keep the existing `init/log/finish` calls. Run `python test.py` from any directory afterward. Only the configured TrackNest connection uses `trust_env=False`; HTTP/SOCKS proxy environment variables and other training/download requests remain unchanged.
+
+The terminal reports connection verification, acknowledged metric counts, upload waiting, and the final synchronization result. Initialization fails immediately if the server or token is invalid. If connectivity fails during training, Trackio keeps its local buffer and the client reports incomplete synchronization; initializing the same project retries buffered data. Counts cover acknowledged metrics in the current process, including replayed buffers.
+
+Native `import trackio` retains its own behavior: it does not read this configuration and writes locally without a remote URL. Unset `TRACKIO_SPACE_ID` when using TrackNest. The manager bypasses environment proxies for instance startup checks and forwarded requests. Stopped instances return 503; invalid credentials or permissions return 401/403.
+
 ## Check status and logs
 
 ```bash

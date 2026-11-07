@@ -95,7 +95,10 @@ def test_proxy_authorization_for_browser_and_sdk(users):
         login(client, "admin")
         assert auth(client, "alice").status_code == 403
     with patch("app.is_running", return_value=False):
-        assert auth(client, "alice", **{"X-Trackio-Write-Token": users["alice"].write_token}).status_code == 403
+        response = auth(client, "alice", **{"X-Trackio-Write-Token": users["alice"].write_token})
+        assert response.status_code == 503
+        assert "实验实例未运行".encode() in response.data
+        assert auth(client, "alice", **{"X-Trackio-Write-Token": users["bob"].write_token}).status_code == 403
 
 
 def test_stale_pid_never_signaled(users):
@@ -146,6 +149,27 @@ def test_real_backends_use_separate_directories(users):
     finally:
         stop_trackio(alice)
         stop_trackio(bob)
+
+
+def test_start_and_dashboard_ignore_environment_proxies(users, monkeypatch):
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:1")
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    alice = users["alice"]
+    client = app.test_client()
+    login(client, "alice")
+    try:
+        assert post(client, f"/start/{alice.id}").status_code == 302
+        db.session.refresh(alice)
+        assert is_running(alice)
+        page = client.get("/")
+        assert f'href="/u/{alice.username}/?x_axis=iteration"'.encode() in page.data
+        assert client.get(f"/u/{alice.username}/").status_code == 200
+        assert client.post(f"/u/{alice.username}/api/get_all_projects",
+                           json={"args": [], "kwargs": {}}).status_code == 200
+    finally:
+        stop_trackio(alice)
 
 
 def test_language_switch_persists_across_login_and_logout(users):

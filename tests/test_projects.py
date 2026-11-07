@@ -111,7 +111,9 @@ def test_project_gateway_roles_revocation_and_unknown_routes(users, project):
         assert proxy_auth(anonymous, project, **{"X-Trackio-Write-Token": token}).status_code == 403
         assert proxy_auth(viewer, project).status_code == 403
     with patch("app.is_running", return_value=False):
-        assert proxy_auth(owner, project).status_code == 403
+        response = proxy_auth(owner, project)
+        assert response.status_code == 503
+        assert "实验实例未运行".encode() in response.data
 
 
 def test_project_deletion_and_account_cleanup(users, project):
