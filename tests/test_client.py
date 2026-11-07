@@ -23,22 +23,32 @@ def client_module(monkeypatch, tmp_path):
     return module
 
 
-def test_login_verifies_before_saving_private_config(client_module, monkeypatch, capsys):
+@pytest.mark.parametrize("running", [False, True])
+def test_login_verifies_before_saving_private_config(client_module, monkeypatch, capsys, running):
     module = client_module
-    remote = Mock()
+    response = Mock()
+    response.json.return_value = {"authenticated": True, "instance_running": running}
+    verify = Mock(return_value=response)
+    monkeypatch.setattr(module.httpx2, "get", verify)
+    remote = Mock(side_effect=AssertionError("Login must not contact the Trackio instance"))
     monkeypatch.setattr(module, "_RemoteClient", remote)
     monkeypatch.setattr(module.getpass, "getpass", lambda prompt: "private-token")
     monkeypatch.setattr("sys.argv", ["tracknest", "login", "--server-url", "http://localhost:9000/u/alice/"])
-    module.main()
-    remote.assert_called_once_with("http://localhost:9000/u/alice/", write_token="private-token",
-                                   httpx_kwargs={"trust_env": False}, verbose=False)
+    assert module.main() == 0
+    verify.assert_called_once_with("http://localhost:9000/u/alice/__tracknest/auth",
+                                  headers={"X-Trackio-Write-Token": "private-token"}, trust_env=False, timeout=10)
+    remote.assert_not_called()
     path = module._config_path()
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     config = json.loads(path.read_text())
     assert config["token"] == "private-token"
-    assert "private-token" not in capsys.readouterr().out
-    remote.side_effect = ConnectionError("unreachable")
+    output = capsys.readouterr().out
+    assert "Login successful" in output
+    assert ("Instance: stopped" in output) != running
+    assert "private-token" not in output
+    verify.side_effect = ConnectionError("unreachable")
     assert module.main() == 1
+    assert "Login failed" in capsys.readouterr().out
     assert json.loads(path.read_text()) == config
 
 
@@ -47,8 +57,9 @@ def test_cli_status_reports_destination_scoped_pending_data_without_writes(clien
     module = client_module
     config = {"server_url": "http://localhost:9000/u/alice/", "token": "private-token"}
     monkeypatch.setattr(module, "_read_config", lambda: config)
-    remote = Mock(side_effect=None if connected else ConnectionError("connection refused"))
-    monkeypatch.setattr(module, "_RemoteClient", remote)
+    verify = Mock(return_value={"authenticated": True, "instance_running": True},
+                  side_effect=None if connected else ConnectionError("connection refused"))
+    monkeypatch.setattr(module, "_verify_credentials", verify)
     cache = tmp_path / "cache"
     cache.mkdir()
     database = cache / "buffered-project.db"
@@ -66,10 +77,10 @@ def test_cli_status_reports_destination_scoped_pending_data_without_writes(clien
     assert "pending 2 metrics, 0 system records, 0 traces, 1 files" in output
     assert "exclude in-memory uploads" in output
     assert "private-token" not in output
-    assert ("Connection: connected" in output) == connected
+    assert ("Authentication: verified" in output) == connected
     assert database.read_bytes() == before
     assert set(cache.iterdir()) == {database}
-    assert remote.call_args.kwargs["httpx_kwargs"] == {"trust_env": False}
+    verify.assert_called_once_with(config["server_url"], config["token"])
 
 
 def test_cli_without_configuration_exits_with_login_instructions(client_module, monkeypatch, capsys):
@@ -82,7 +93,7 @@ def test_cli_without_configuration_exits_with_login_instructions(client_module, 
 def test_cli_status_does_not_claim_empty_cache_when_a_database_is_unreadable(client_module, monkeypatch, tmp_path, capsys):
     module = client_module
     monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
-    monkeypatch.setattr(module, "_RemoteClient", Mock())
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": True})
     (tmp_path / "broken.db").write_bytes(b"not a database")
     monkeypatch.setattr(module.SQLiteStorage, "get_project_db_path", lambda project: tmp_path / f"{project}.db")
     monkeypatch.setattr("sys.argv", ["tracknest", "status"])

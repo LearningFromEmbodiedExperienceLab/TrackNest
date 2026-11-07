@@ -62,12 +62,16 @@ Keep the tunnel running on the training machine, for example `ssh -N -L 9000:loc
 Keep the SSH tunnel connected, download the client wheel from the server into any directory, then install and configure it once with your training Python. Replace the host for direct server access. For team spaces, use the `/p/<project-id>/` URL shown on the project page:
 
 ```bash
-curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.2-py3-none-any.whl
-python -m pip install --upgrade ./tracknest_client-0.1.2-py3-none-any.whl
+curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.3-py3-none-any.whl
+python -m pip install --upgrade ./tracknest_client-0.1.3-py3-none-any.whl
 tracknest login --server-url http://localhost:9000/u/<username>/
 ```
 
 Enter the token from the page when prompted. Settings are saved in `~/.config/tracknest/client.json` (respecting `XDG_CONFIG_HOME`) with mode `0600`. Run login again after changing spaces or rotating the token. No per-terminal URL, token, or NO_PROXY setup is needed.
+
+Each account has one client token for its personal space and every team project. Membership determines read/write access to each team project. Rotating the account token invalidates its old credentials across all spaces. Older project-specific tokens are no longer used for authentication; existing team clients should log in again with the account token shown on the page.
+
+`login` verifies credentials with the manager and succeeds even when the experiment instance is stopped. It never starts the instance. Start the instance from the web panel before training or querying experiment data; `status` reports authentication and instance state separately.
 
 Change the training import to `import tracknest as trackio`; keep the existing `init/log/finish` calls. Run `python test.py` from any directory afterward. Only the configured TrackNest connection uses `trust_env=False`; HTTP/SOCKS proxy environment variables and other training/download requests remain unchanged.
 
@@ -86,7 +90,7 @@ tracknest runs my-project-test    # Run names, IDs, and creation times
 tracknest --help
 ```
 
-The same commands work with `python -m tracknest`, for example `python -m tracknest status`, to select a specific Python environment. Queries are read-only, preserve training proxies, and never display the token. `status` checks the cache for the configured server even while offline; counts exclude in-memory upload queues in active training processes. Missing configuration, connection/query failures, or unreadable cache databases return exit code 1. Successful queries return 0, with a warning if pending cache exists. The CLI does not start/stop instances or trigger uploads.
+The same commands work with `python -m tracknest`, for example `python -m tracknest status`, to select a specific Python environment. Queries are read-only, preserve training proxies, and never display the token. `status` checks the cache for the configured server even while offline; counts exclude in-memory upload queues in active training processes. Missing configuration, connection/query failures, stopped instances in `status`, or unreadable cache databases return exit code 1. Successful queries return 0, with a warning if pending cache exists. The CLI does not start/stop instances or trigger uploads.
 
 ## Check status and logs
 
@@ -99,6 +103,14 @@ tail -f instance/gunicorn-error.log
 ```
 
 `status.sh` exits with code 0 when both HTTP endpoints are healthy and no instance has stopped unexpectedly; otherwise it exits with code 1. Intentionally stopped experiment instances are not considered failures. Access logs are in `instance/gunicorn-access.log`. Each experiment instance stores startup and error logs in `server.log` in its data directory. With a custom `MANAGER_STATE_DIR`, management PID files and logs are also stored there.
+
+## Invite collaborators to a personal project
+
+In the Panel, open **Manage experiment projects** under Personal experiment space, expand a project, select a registered collaborator and a viewer or editor role, then choose **Invite and convert to team project**. Pause training and stop the personal instance first. The project must satisfy existing team naming rules and must not duplicate a team project you already own.
+
+Only the selected project is converted. Existing runs, metrics, media, artifacts, and traces are preserved; other personal projects remain private. The project appears under Team projects, where its owner can add/remove members or change their roles. Start the team instance so collaborators can use its URL with their own account tokens.
+
+The owner's original personal upload URL, project name, and account token continue to work. Restart the personal instance to continue using that URL; new uploads and the team instance use the same storage. Conversion keeps relative compatibility links inside the user's data directory. Preserve these links when backing up or relocating user data.
 
 ## Delete a personal experiment project
 

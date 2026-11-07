@@ -12,7 +12,7 @@ import sqlite3
 import sys
 import tempfile
 import time
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode, urljoin, urlsplit
 
 import httpx2
 import trackio as _sdk
@@ -120,6 +120,16 @@ def __getattr__(name):
     return getattr(_sdk, name)
 
 
+def _verify_credentials(server_url, token):
+    response = httpx2.get(urljoin(server_url, "__tracknest/auth"),
+                         headers={"X-Trackio-Write-Token": token}, trust_env=False, timeout=10)
+    response.raise_for_status()
+    state = response.json()
+    if state.get("authenticated") is not True or not isinstance(state.get("instance_running"), bool):
+        raise RuntimeError("The server did not confirm TrackNest credentials")
+    return state
+
+
 def _login(args, parser):
     url = urlsplit(args.server_url)
     if url.scheme not in ("http", "https") or not url.netloc or url.query or url.fragment or url.username:
@@ -128,13 +138,15 @@ def _login(args, parser):
     token = getpass.getpass("TrackNest Token: ")
     if not token:
         parser.error("Token is required")
-    _RemoteClient(server_url, write_token=token, httpx_kwargs={"trust_env": False}, verbose=False)
+    state = _verify_credentials(server_url, token)
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as file:
         json.dump({"server_url": server_url, "token": token}, file)
     os.replace(file.name, path)
-    _status(f"Connection verified. Settings saved to {path} (readable and writable only by your user).", "success")
+    _status(f"Login successful. Credentials verified. Settings saved to {path} (only your user can read/write).", "success")
+    if not state["instance_running"]:
+        _status("Instance: stopped. Start it from the web panel before training.", "warning")
 
 
 def _pending_status(server_url):
@@ -187,9 +199,11 @@ def main():
             _status(f"Server: {config['server_url']}")
             reachable = True
             try:
-                _RemoteClient(config["server_url"], write_token=config["token"],
-                              httpx_kwargs={"trust_env": False}, verbose=False)
-                _status("Connection: connected; token verified.", "success")
+                state = _verify_credentials(config["server_url"], config["token"])
+                _status("Authentication: verified.", "success")
+                reachable = state["instance_running"]
+                _status("Instance: running." if reachable else "Instance: stopped. Start it from the web panel before training.",
+                        "success" if reachable else "warning")
             except (OSError, httpx2.HTTPError, ValueError, RuntimeError) as error:
                 reachable = False
                 _status(f"Connection: unavailable ({error})", "error")
@@ -209,7 +223,7 @@ def main():
                 print(f"  {record['name']}  id={record['id']}  created={record['created_at'] or '-'}")
         return 0
     except (OSError, httpx2.HTTPError, ValueError, RuntimeError) as error:
-        _status(str(error), "error")
+        _status(f"Login failed: {error}" if args.command == "login" else str(error), "error")
         return 1
 
 

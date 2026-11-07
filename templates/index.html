@@ -47,11 +47,12 @@
         <div class="ui-pane-heading"><h2 class="panel-title" id="connection-title">{{ t('我的训练接入', 'Connect your training') }}</h2></div>
         <div class="ui-panel-body ui-stack">
             {% include 'client_install.html' %}
-            <div><h3 class="step-heading ui-kicker">01 / {{ t('配置一次', 'Configure once') }}</h3>
+            <div><h3 class="step-heading ui-kicker">{{ t('使用前需要登录认证', 'Log in to authenticate before use') }}</h3>
                 <pre class="ui-code"><code>tracknest login --server-url "{{ request.host_url }}u/{{ g.user.username }}/"</code></pre>
                 <p class="ui-hint">{{ t('按提示输入下方 Token。配置会保存，无需每次设置环境变量。仅上报连接绕过代理，训练和下载代理保持原样；SSH 隧道仍需保持连接。', 'Enter the token below when prompted. Settings persist across terminals. Only uploads bypass proxies; training and downloads retain their proxy settings. Keep your SSH tunnel connected.') }}</p>
                 <pre class="ui-code"><code>{{ g.user.write_token }}</code></pre>
             </div>
+            {% include 'client_cli.html' %}
             <details class="ui-disclosure"><summary>{{ t('训练代码示例 · 25 次迭代', 'Training example · 25 iterations') }}</summary><div class="ui-disclosure-body">
                 <pre class="ui-code"><code>import tracknest as trackio
 

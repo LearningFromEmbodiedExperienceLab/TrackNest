@@ -2,4 +2,3 @@
 <pre class="ui-code"><code>curl --noproxy '*' -fLO "{{ url_for('client_wheel', _external=True) }}"
 python -m pip install --upgrade "./{{ client_wheel_name }}"</code></pre>
 <p class="ui-hint"><a href="{{ url_for('client_wheel') }}">{{ t('也可直接下载客户端 wheel', 'Or download the client wheel directly') }}</a></p>
-<p class="ui-hint">{{ t('配置后可用 tracknest status 检查连接和本地待传数据，tracknest projects 列出项目，tracknest runs PROJECT 查看运行列表。', 'After login, use tracknest status to check connectivity and pending cache, tracknest projects to list projects, and tracknest runs PROJECT to list runs.') }}</p>

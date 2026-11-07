@@ -94,7 +94,7 @@ def export_user(username, destination):
             owner = db.session.get(ProjectMember, (project.id, user.id))
             manifest["projects"].append({
                 "id": project.id, "name": project.name, "write_token": project.write_token,
-                "owner_token": owner.token,
+                "owner_token": owner._legacy_token,
             })
         destination.mkdir(parents=True, mode=0o700)
         try:
@@ -145,7 +145,7 @@ def import_user(source):
         if destination.exists() or destination.is_symlink():
             raise ValueError(f"用户数据目录已存在，未覆盖：{destination}")
         for project in projects:
-            if db.session.get(SharedProject, project["id"]) or ProjectMember.query.filter_by(token=project["owner_token"]).first():
+            if db.session.get(SharedProject, project["id"]) or ProjectMember.query.filter_by(_legacy_token=project["owner_token"]).first():
                 raise ValueError("团队项目 ID 或成员 Token 已存在，未覆盖。")
         DATA_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
@@ -164,7 +164,7 @@ def import_user(source):
                     data_dir=str(destination / "projects" / item["id"]),
                 )
                 db.session.add(project)
-                db.session.add(ProjectMember(project=project, user=user, role="owner", token=item["owner_token"]))
+                db.session.add(ProjectMember(project=project, user=user, role="owner", _legacy_token=item["owner_token"]))
                 db.session.flush()
             db.session.commit()
         except Exception:

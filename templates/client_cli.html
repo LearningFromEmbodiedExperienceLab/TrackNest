@@ -1,0 +1,8 @@
+<details class="ui-disclosure"><summary>{{ t('TrackNest CLI 使用', 'TrackNest CLI usage') }}</summary><div class="ui-disclosure-body ui-stack">
+    <p class="ui-hint">{{ t('完成 login 配置后，在训练环境的终端运行：', 'After configuring login, run these commands in your training environment:') }}</p>
+    <pre class="ui-code"><code>tracknest status           # {{ t('鉴权、实例状态和本地待传数据', 'Authentication, instance state and pending cache') }}
+tracknest projects         # {{ t('列出项目', 'List projects') }}
+tracknest runs my-project  # {{ t('查看指定项目的 Run，替换为你的项目名', 'List runs; replace my-project with your project name') }}
+tracknest --help           # {{ t('查看帮助', 'Show help') }}</code></pre>
+    <p class="ui-hint">{{ t('这些查询不会启动实例或触发上传。也可使用 python -m tracknest 执行相同命令。', 'These queries do not start instances or trigger uploads. You can also run the same commands with python -m tracknest.') }}</p>
+</div></details>

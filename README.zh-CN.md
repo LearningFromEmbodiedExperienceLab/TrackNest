@@ -62,12 +62,16 @@ sudo nginx -t && sudo systemctl reload nginx
 保持 SSH 隧道连接，在任意目录下载服务器提供的客户端 wheel，使用训练 Python 安装并配置一次连接（直接访问服务器时替换域名；团队空间使用页面显示的 `/p/<项目ID>/` URL）：
 
 ```bash
-curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.2-py3-none-any.whl
-python -m pip install --upgrade ./tracknest_client-0.1.2-py3-none-any.whl
+curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.3-py3-none-any.whl
+python -m pip install --upgrade ./tracknest_client-0.1.3-py3-none-any.whl
 tracknest login --server-url http://localhost:9000/u/<用户名>/
 ```
 
 按提示输入页面上的 Token。配置保存在 `~/.config/tracknest/client.json`（支持 `XDG_CONFIG_HOME`），文件权限为 `0600`；切换空间或重置 Token 后重新运行 login。无需每次设置 URL、Token 或 NO_PROXY。
+
+每个账号只有一个客户端 Token，个人空间和全部团队项目共用同一个 Token；是否可读写某个团队项目由成员权限决定。重置账号 Token 会使该账号在所有空间中的旧凭据失效。旧版本的项目专属 Token 不再用于鉴权，已有团队接入请使用页面显示的账号 Token 重新登录。
+
+`login` 由管理端验证凭据，实验实例停止时也能成功登录，且不会启动实例。训练或查询实验数据前，再从网页启动实例；`status` 会分别显示鉴权结果和实例运行状态。
 
 训练脚本只需把导入改为 `import tracknest as trackio`，其余 `init/log/finish` 代码保持原样。之后可从任意目录直接运行 `python test.py`，无需进入仓库目录。客户端只对已配置的 TrackNest 连接使用 `trust_env=False`，不修改 HTTP/SOCKS 代理环境变量，不影响训练下载或其他请求。
 
@@ -86,7 +90,7 @@ tracknest runs my-project-test    # Run 名称、ID 和创建时间
 tracknest --help
 ```
 
-也支持 `python -m tracknest status` 等同名命令，以明确使用指定的 Python 环境。查询只读，继续保留训练代理，不显示 Token。`status` 即使无法连接服务器，也会检查当前服务器对应的本地缓存；缓存数量不包含仍在训练进程内存中的上传队列。配置缺失、连接或查询失败、缓存无法完整读取时退出码为 1；正常查询为 0，存在待传缓存时显示提醒。CLI 不启动或停止实例，也不自动重传数据。
+也支持 `python -m tracknest status` 等同名命令，以明确使用指定的 Python 环境。查询只读，继续保留训练代理，不显示 Token。`status` 即使无法连接服务器，也会检查当前服务器对应的本地缓存；缓存数量不包含仍在训练进程内存中的上传队列。配置缺失、连接或查询失败、`status` 中实例未运行、缓存无法完整读取时退出码为 1；正常查询为 0，存在待传缓存时显示提醒。CLI 不启动或停止实例，也不自动重传数据。
 
 ## 查看状态和日志
 
@@ -99,6 +103,14 @@ tail -f instance/gunicorn-error.log
 ```
 
 `status.sh` 在两个 HTTP 入口正常、没有意外退出的实例时返回退出码 0，否则返回 1；主动停止的实验实例不算异常。请求记录在 `instance/gunicorn-access.log`，每个实验实例的启动和报错日志在其数据目录下的 `server.log`。自定义 `MANAGER_STATE_DIR` 时，管理 PID 和日志也保存在该目录中。
+
+## 邀请协作者共享个人项目
+
+在 Panel 的「个人实验空间 → 管理实验项目」中展开项目，选择已注册的协作者和只读或编辑权限，点击「邀请并转为团队项目」。操作前先暂停训练并停止个人实例。项目名需符合现有团队项目命名规则，且不能与自己已有的团队项目重名。
+
+只会转换选中的 project，保留已有 Run、指标、媒体、产物和 Trace 数据；其他个人项目保持私有。项目会出现在「团队项目」中，可继续添加或移除成员、调整权限。启动团队实例后协作者使用团队 URL 和自己的账号 Token 访问。
+
+所有者原来的个人上报 URL、项目名和账号 Token 继续可用，无需修改训练接入；使用原 URL 时重新启动个人实例即可，新增数据与团队实例共享同一份存储。转换时保留了用户数据目录内部的相对路径链接，备份和迁移用户数据时请保留这些链接。
 
 ## 删除个人实验项目
 

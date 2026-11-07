@@ -128,15 +128,88 @@ http {{
         from test_client import check_persistent_client
         check_persistent_client(public, alice, tmp_path)
         stop_trackio(alice)
+        check_login_while_stopped(public, alice, tmp_path)
         start_trackio(alice)
         assert "private-project" in a.predict(api_name="/get_all_projects")
         check_shared_project(public, users, tmp_path)
+        check_personal_project_sharing(public, users, tmp_path)
     finally:
         for proc in reversed(procs):
             proc.terminate()
             proc.wait(timeout=10)
         stop_trackio(alice)
         stop_trackio(bob)
+
+
+def check_login_while_stopped(public, alice, tmp_path):
+    environment = training_environment(f"{public}/u/alice/", alice.write_token, tmp_path)
+    environment["TEST_LOGIN_TOKEN"] = alice.write_token
+    code = f'''import os, sys, tracknest
+tracknest.getpass.getpass = lambda prompt: os.environ["TEST_LOGIN_TOKEN"]
+sys.argv = ["tracknest", "login", "--server-url", "{public}/u/alice/"]
+raise SystemExit(tracknest.main())
+'''
+    result = subprocess.run([sys.executable, "-c", code], env=environment,
+                            capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    assert "Login successful" in result.stdout and "Instance: stopped" in result.stdout
+    config = Path(environment["XDG_CONFIG_HOME"]) / "tracknest/client.json"
+    before = config.read_bytes()
+    environment["TEST_LOGIN_TOKEN"] = "invalid-token"
+    result = subprocess.run([sys.executable, "-c", code], env=environment,
+                            capture_output=True, text=True, timeout=15)
+    assert result.returncode == 1 and "Login successful" not in result.stdout
+    assert "Login failed" in result.stdout
+    assert config.read_bytes() == before
+    result = subprocess.run([sys.executable, "-m", "tracknest", "status"], env=environment,
+                            capture_output=True, text=True, timeout=15)
+    assert result.returncode == 1
+    assert "Authentication: verified" in result.stdout and "Instance: stopped" in result.stdout
+
+
+def check_personal_project_sharing(public, users, tmp_path):
+    from app import db, SharedProject
+    browser = requests.Session()
+    browser.trust_env = False
+    page = browser.get(public + '/login', timeout=5)
+    csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text)[1]
+    page = browser.post(public + '/login', data={'csrf_token': csrf, 'username': 'alice',
+                                               'password': 'test-password-123'}, timeout=5)
+    csrf = re.search(r'name="csrf_token" value="([^"]+)"', page.text)[1]
+    data = {'csrf_token': csrf, 'project': 'private-project', 'username': 'bob', 'role': 'viewer'}
+    assert browser.post(public + '/personal/projects/share', data=data, timeout=10).status_code == 409
+    browser.post(public + f'/stop/{users["alice"].id}', data={'csrf_token': csrf}, timeout=10).raise_for_status()
+    page = browser.post(public + '/personal/projects/share', data=data, timeout=15)
+    assert page.status_code == 200
+    project_id = page.url.rsplit('/', 1)[1]
+    db.session.expire_all()
+    project = db.session.get(SharedProject, project_id)
+    assert project and project.name == 'private-project'
+    old_url, old_token = public + '/u/alice/', users['alice'].write_token
+    try:
+        browser.post(public + f'/projects/{project_id}/instance', data={'csrf_token': csrf, 'action': 'start'}, timeout=45).raise_for_status()
+        browser.post(public + f'/start/{users["alice"].id}', data={'csrf_token': csrf}, timeout=45).raise_for_status()
+        team = RemoteClient(public + project.backend_path + '/', write_token=users['bob'].write_token)
+        assert team.predict(api_name='/get_all_projects') == ['private-project']
+        assert len(team.predict('private-project', 'baseline', api_name='/get_logs')) == 25
+        continued = '''import tracknest as trackio
+trackio.init(project="private-project", name="after-sharing", auto_log_gpu=False, auto_log_cpu=False)
+trackio.log({"loss":0.01}, step=26)
+trackio.finish()
+'''
+        result = subprocess.run([sys.executable, '-c', continued],
+                                env=training_environment(old_url, old_token, tmp_path),
+                                capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        assert team.predict('private-project', 'after-sharing', api_name='/get_logs')[0]['loss'] == 0.01
+        headers = {'X-Trackio-Write-Token': users['bob'].write_token}
+        assert requests.post(public + project.backend_path + '/api/delete_run', headers=headers, json={}, timeout=5).status_code == 403
+        assert requests.get(old_url, headers=headers, timeout=5).status_code == 403
+    finally:
+        db.session.refresh(project)
+        stop_trackio(project)
+        db.session.expire_all()
+        browser.close()
 
 
 def check_shared_project(public, users, tmp_path):
@@ -241,9 +314,9 @@ def check_shared_project(public, users, tmp_path):
         }, timeout=5).raise_for_status()
         db.session.expire_all()
         rejoined_token = db.session.get(ProjectMember, (project_id, users["bob"].id)).token
-        assert rejoined_token != new_token
+        assert rejoined_token == new_token
         assert editor.get(backend, timeout=5).status_code == 200
-        assert requests.get(backend, headers={"X-Trackio-Write-Token": new_token}, timeout=5).status_code == 403
+        assert requests.get(backend, headers={"X-Trackio-Write-Token": new_token}, timeout=5).status_code == 200
         owner.post(public + path + f"/members/{users['bob'].id}/remove", data={"csrf_token": csrf(owner, path)}, timeout=5).raise_for_status()
         assert editor.get(backend, timeout=5).status_code == 403
         assert requests.get(backend, headers={"X-Trackio-Write-Token": rejoined_token}, timeout=5).status_code == 403

@@ -14,7 +14,7 @@
         <section class="ui-panel" aria-labelledby="project-instance-title">
             <div class="ui-pane-heading"><h2 class="panel-title" id="project-instance-title">{{ t('项目实例', 'Project instance') }}</h2><span class="ui-pane-heading-meta">{{ t('运行中', 'Running') if running else t('已停止', 'Stopped') }}</span></div>
             <div class="ui-panel-body ui-stack">
-                <p class="ui-hint">{{ t('项目成员使用同一个实验面板。个人空间的数据不会自动迁入。', 'Members share this dashboard. Personal experiments are not moved into this project automatically.') }}</p>
+                <p class="ui-hint">{{ t('项目成员共享本项目的数据；其他个人实验项目不会共享。', 'Members share this project’s data. Other personal experiment projects remain private.') }}</p>
                 <div class="ui-form-footer">
                     {% if running %}<a class="ui-button ui-button--secondary" href="{{ project.backend_path }}/?project={{ project.name }}&amp;x_axis=iteration" target="_blank" rel="noopener">{{ t('打开实验面板', 'Open dashboard') }} ↗</a>{% else %}<span class="ui-hint">{{ t('请所有者启动项目实例。', 'Ask the owner to start this instance.') }}</span>{% endif %}
                     {% if membership.role == 'owner' %}
@@ -89,13 +89,14 @@
         {% endif %}
     </div>
     <section class="ui-panel" aria-labelledby="shared-connection-title">
-        <div class="ui-pane-heading"><h2 class="panel-title" id="shared-connection-title">{{ t('我的项目凭据', 'My project credentials') }}</h2></div>
+        <div class="ui-pane-heading"><h2 class="panel-title" id="shared-connection-title">{{ t('项目接入', 'Project connection') }}</h2></div>
         <div class="ui-panel-body ui-stack">
-            <p class="ui-hint">{{ t('只读凭据可读取实验，不能上报训练或修改数据。', 'Viewer credentials can read experiments but cannot log training or change data.') if membership.role == 'viewer' else t('使用本人的项目 Token 上报训练。请先启动项目实例。', 'Use your own project token to log training. Start the project instance first.') }}</p>
+            <p class="ui-hint">{{ t('你在本项目只有只读权限，可读取实验，不能上报训练或修改数据。', 'You have viewer access to this project: you can read experiments but cannot log training or change data.') if membership.role == 'viewer' else t('使用本人的账号 Token 上报训练。请先启动项目实例。', 'Use your account token to log training. Start the project instance first.') }}</p>
             {% include 'client_install.html' %}
             <pre class="ui-code"><code>tracknest login --server-url "{{ request.host_url }}p/{{ project.id }}/"</code></pre>
             <p class="ui-hint">{{ t('按提示输入下方 Token。仅上报连接绕过代理；配置会保存，运行脚本无需进入仓库目录。SSH 隧道仍需保持连接。', 'Enter the token below when prompted. Only uploads bypass proxies. Settings persist and scripts can run from any directory. Keep your SSH tunnel connected.') }}</p>
             <pre class="ui-code"><code>{{ membership.token }}</code></pre>
+            {% include 'client_cli.html' %}
             {% if membership.role != 'viewer' %}
             <details class="ui-disclosure"><summary>{{ t('训练代码示例 · 25 次迭代', 'Training example · 25 iterations') }}</summary><div class="ui-disclosure-body">
             <pre class="ui-code"><code>import tracknest as trackio
@@ -110,11 +111,11 @@ for iteration in range(1, 26):
 trackio.finish()</code></pre>
             </div></details>
             {% endif %}
-            <form action="{{ url_for('rotate_project_token', project_id=project.id) }}" method="post" data-confirm="{{ t('重置后原 Token 会立即失效，训练脚本需要更新。继续？', 'Reset your token? Existing training scripts will need the new token.') }}" onsubmit="return confirm(this.dataset.confirm)">
+            <form action="{{ url_for('rotate_project_token', project_id=project.id) }}" method="post" data-confirm="{{ t('这会重置账号的唯一 Token，个人空间和所有团队项目的旧凭据立即失效。继续？', 'Reset your account token? Old credentials for your personal space and all team projects will stop working immediately.') }}" onsubmit="return confirm(this.dataset.confirm)">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button class="ui-button ui-button--secondary" type="submit">{{ t('重置我的 Token', 'Reset my token') }}</button>
+                <button class="ui-button ui-button--secondary" type="submit">{{ t('重置我的账号 Token', 'Reset my account token') }}</button>
             </form>
-            <p class="credential-note ui-hint">{{ t('每位成员有独立凭据。请勿分享个人空间 Token 或其他成员的凭据。', 'Every member has separate credentials. Do not share personal workspace tokens or another member’s credentials.') }}</p>
+            <p class="credential-note ui-hint">{{ t('一个账号一个 Token，个人空间与全部团队项目共用；访问范围由项目成员权限决定。请勿分享账号 Token。', 'One account token works across your personal space and all team projects. Membership determines access. Keep your account token private.') }}</p>
         </div>
     </section>
 </div>

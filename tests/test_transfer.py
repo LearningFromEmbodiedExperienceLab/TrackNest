@@ -122,6 +122,24 @@ def test_single_user_transfer_reassigns_ids_and_preserves_owned_data(users, proj
     assert app.test_cli_runner().invoke(args=["import-user", str(package)]).exit_code != 0
 
 
+def test_backup_with_multiple_projects_keeps_one_account_token(users, project, tmp_path, monkeypatch):
+    owner = app.test_client()
+    login(owner, 'alice')
+    post(owner, '/projects', name='second-project')
+    token = users['alice'].write_token
+    project_ids = [item.id for item in SharedProject.query.filter_by(owner_id=users['alice'].id).all()]
+    assert all(db.session.get(ProjectMember, (project_id, users['alice'].id)).token == token for project_id in project_ids)
+    package = tmp_path / 'multi-project-backup'
+    exported = app.test_cli_runner().invoke(args=['export-user', 'alice', str(package)])
+    assert exported.exit_code == 0, exported.output
+    fresh_target(monkeypatch, tmp_path / 'imported-data')
+    imported = app.test_cli_runner().invoke(args=['import-user', str(package)])
+    assert imported.exit_code == 0, imported.output
+    alice = TrackioUser.query.filter_by(username='alice').one()
+    assert alice.write_token == token
+    assert all(db.session.get(ProjectMember, (project_id, alice.id)).token == token for project_id in project_ids)
+
+
 def test_transfer_rejects_running_users_existing_data_and_invalid_packages(users, project, tmp_path, monkeypatch):
     package = tmp_path / "backup"
     with patch("data_transfer.is_running", return_value=True):

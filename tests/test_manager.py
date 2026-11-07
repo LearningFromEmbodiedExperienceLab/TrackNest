@@ -101,6 +101,25 @@ def test_proxy_authorization_for_browser_and_sdk(users):
         assert auth(client, "alice", **{"X-Trackio-Write-Token": users["bob"].write_token}).status_code == 403
 
 
+@pytest.mark.parametrize("running", [False, True])
+def test_client_login_authenticates_independently_of_instance_state(users, running):
+    client = app.test_client()
+    path = "/u/alice/__tracknest/auth"
+    with patch("app.is_running", return_value=running), patch("app.start_trackio") as start:
+        response = client.get(path, headers={"X-Trackio-Write-Token": users["alice"].write_token})
+        assert response.status_code == 200
+        assert response.json == {"authenticated": True, "instance_running": running}
+        assert users["alice"].write_token.encode() not in response.data
+        assert "X-Trackio-Token" not in response.headers
+        assert client.get(path).status_code == 401
+        assert client.get(path, headers={"X-Trackio-Write-Token": users["bob"].write_token}).status_code == 403
+        login(client, "alice")
+        assert client.get(path).status_code == 401
+        if not running:
+            assert client.get("/u/alice/version").status_code == 503
+        start.assert_not_called()
+
+
 def test_stale_pid_never_signaled(users):
     import os
     user = users["alice"]

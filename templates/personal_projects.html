@@ -8,13 +8,30 @@
     <p class="ui-muted">{{ t('管理个人 Dashboard 中的实验数据，不影响团队项目。', 'Manage experiment data in your personal dashboard. Team projects are unaffected.') }}</p>
 </div></div>
 <div class="ui-stack">
-    {% if running %}<p class="ui-notice" role="status">{{ t('个人实例正在运行。请先暂停训练上报，并返回 Panel 停止个人实例，再删除项目。', 'Your personal instance is running. Pause training uploads and stop it from the Panel before deleting a project.') }}</p>{% endif %}
+    {% if running %}<p class="ui-notice" role="status">{{ t('个人实例正在运行。请先暂停训练上报，并返回 Panel 停止个人实例，再邀请协作者或删除项目。', 'Your personal instance is running. Pause training uploads and stop it from the Panel before inviting collaborators or deleting a project.') }}</p>{% endif %}
     <section class="ui-panel" aria-labelledby="personal-projects-title">
         <div class="ui-pane-heading"><h2 id="personal-projects-title">{{ t('实验项目', 'Experiment projects') }}</h2><span class="ui-pane-heading-meta">{{ projects|length }}</span></div>
         <div class="ui-panel-body ui-stack">
         {% for project in projects %}
             <details class="ui-disclosure">
-                <summary><span class="user-name ui-mono">{{ project }}</span><span class="ui-hint">{{ t('删除实验数据', 'Delete experiment data') }}</span></summary>
+                <summary><span class="user-name ui-mono">{{ project }}</span><span class="ui-hint">{{ t('邀请协作者 / 管理数据', 'Invite collaborators / Manage data') }}</span></summary>
+                <form class="ui-disclosure-body ui-stack" action="{{ url_for('share_personal_project') }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="project" value="{{ project }}">
+                    <p class="ui-hint">{{ t('邀请后，该项目转为独立团队项目，保留全部数据。原个人上报 URL 和账号 Token 不变，其他个人项目不会共享。', 'Inviting a collaborator converts this into an isolated team project with existing data preserved. Your personal upload URL and account token stay the same. Other personal projects remain private.') }}</p>
+                    <label class="ui-field" for="share-user-{{ loop.index }}">{{ t('协作者', 'Collaborator') }}
+                        <select class="ui-input" id="share-user-{{ loop.index }}" name="username" required {{ 'disabled' if running else '' }}>
+                            <option value="">{{ t('选择已注册用户', 'Select a registered user') }}</option>
+                            {% for user in candidates %}<option value="{{ user.username }}">{{ user.display_name }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label class="ui-field" for="share-role-{{ loop.index }}">{{ t('权限', 'Role') }}
+                        <select class="ui-input" id="share-role-{{ loop.index }}" name="role" {{ 'disabled' if running else '' }}>
+                            <option value="viewer">{{ t('只读', 'Viewer') }}</option><option value="editor">{{ t('编辑', 'Editor') }}</option>
+                        </select>
+                    </label>
+                    <button class="ui-button" type="submit" {{ 'disabled' if running else '' }}>{{ t('邀请并转为团队项目', 'Invite and convert to team project') }}</button>
+                </form>
                 <form class="ui-disclosure-body ui-stack" action="{{ url_for('delete_personal_project') }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="project" value="{{ project }}">

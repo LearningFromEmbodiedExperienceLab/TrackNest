@@ -90,7 +90,7 @@ def test_project_gateway_roles_revocation_and_unknown_routes(users, project):
     with patch("app.is_running", return_value=True):
         assert proxy_auth(anonymous, project).status_code == 401
         assert proxy_auth(anonymous, project, **{"X-Trackio-Write-Token": project.write_token}).status_code == 403
-        assert proxy_auth(anonymous, project, **{"X-Trackio-Write-Token": users["bob"].write_token}).status_code == 403
+        assert proxy_auth(anonymous, project, **{"X-Trackio-Write-Token": users["bob"].write_token}).status_code == 204
         response = proxy_auth(viewer, project)
         assert response.status_code == 204 and response.headers.get("X-Trackio-Token", "") == ""
         for path in ("/version", "/file", "/config.json", "/assets/app.js", "/static/trackio/logo.png"):
@@ -114,6 +114,23 @@ def test_project_gateway_roles_revocation_and_unknown_routes(users, project):
         response = proxy_auth(owner, project)
         assert response.status_code == 503
         assert "实验实例未运行".encode() in response.data
+
+
+def test_project_client_login_accepts_viewer_token_while_stopped_and_rejects_revoked_tokens(users, project):
+    owner = owner_client()
+    post(owner, f"/projects/{project.id}/members", username="bob", role="viewer")
+    token = db.session.get(ProjectMember, (project.id, users["bob"].id)).token
+    client = app.test_client()
+    path = f"/p/{project.id}/__tracknest/auth"
+    with patch("app.is_running", return_value=False), patch("app.start_trackio") as start:
+        response = client.get(path, headers={"X-Trackio-Write-Token": token})
+        assert response.status_code == 200
+        assert response.json == {"authenticated": True, "instance_running": False}
+        assert client.get(f"/p/{project.id}/version", headers={"X-Trackio-Write-Token": token}).status_code == 503
+        assert client.get(path, headers={"X-Trackio-Write-Token": project.write_token}).status_code == 403
+        post(owner, f"/projects/{project.id}/members/{users['bob'].id}/remove")
+        assert client.get(path, headers={"X-Trackio-Write-Token": token}).status_code == 403
+        start.assert_not_called()
 
 
 def test_project_deletion_and_account_cleanup(users, project):
@@ -147,20 +164,41 @@ def test_project_language_switch_stays_on_project(users, project):
     assert response.location == f"/projects/{project.id}"
     page = client.get(response.location)
     assert b"Project members" in page.data
-    assert b"My project credentials" in page.data
+    assert b"Project connection" in page.data
 
 
-def test_project_tokens_are_scoped_even_for_members_of_both_projects(users, project):
+def test_account_token_access_follows_membership_across_projects(users, project):
     owner = owner_client()
     token = db.session.get(ProjectMember, (project.id, users["alice"].id)).token
     bob = app.test_client()
     login(bob, "bob")
     assert post(bob, "/projects", name=project.name).status_code == 302
     other = SharedProject.query.filter_by(owner_id=users["bob"].id).one()
-    post(bob, f"/projects/{other.id}/members", username="alice", role="editor")
     with patch("app.is_running", return_value=True):
-        assert proxy_auth(owner, other).status_code == 204
         assert proxy_auth(owner, other, **{"X-Trackio-Write-Token": token}).status_code == 403
+        post(bob, f"/projects/{other.id}/members", username="alice", role="editor")
+        assert proxy_auth(owner, other).status_code == 204
+        assert proxy_auth(owner, other, **{"X-Trackio-Write-Token": token}).status_code == 204
+
+
+def test_account_token_rotation_applies_to_personal_space_and_all_team_memberships(users, project):
+    owner = owner_client()
+    post(owner, f"/projects/{project.id}/members", username="bob", role="editor")
+    post(owner, "/projects", name="another-team")
+    other = SharedProject.query.filter_by(name="another-team").one()
+    post(owner, f"/projects/{other.id}/members", username="bob", role="viewer")
+    old_token = users["bob"].write_token
+    client = app.test_client()
+    login(client, "bob")
+    assert post(client, f"/projects/{project.id}/token").status_code == 302
+    new_token = users["bob"].write_token
+    assert new_token != old_token
+    for target in (project, other):
+        assert db.session.get(ProjectMember, (target.id, users["bob"].id)).token == new_token
+        path = target.backend_path + "/__tracknest/auth"
+        assert client.get(path, headers={"X-Trackio-Write-Token": old_token}).status_code == 403
+        assert client.get(path, headers={"X-Trackio-Write-Token": new_token}).status_code == 200
+    assert client.get('/u/bob/__tracknest/auth', headers={"X-Trackio-Write-Token": new_token}).status_code == 200
     assert other.port != project.port
 
 
@@ -203,8 +241,8 @@ def test_registered_user_can_be_invited_and_leave(users, project, role):
         assert proxy_auth(owner, project).status_code == 204
         post(owner, url + "/members", username="bob", role=role)
         replacement = db.session.get(ProjectMember, (project.id, users["bob"].id))
-        assert replacement.token != token
-        assert proxy_auth(app.test_client(), project, **{"X-Trackio-Write-Token": token}).status_code == 403
+        assert replacement.token == token
+        assert proxy_auth(app.test_client(), project, **{"X-Trackio-Write-Token": token}).status_code == 204
         assert proxy_auth(client, project).status_code == 204
 
 

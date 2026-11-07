@@ -97,8 +97,13 @@ class ProjectMember(db.Model):
     project = db.relationship(SharedProject)
     user = db.relationship(TrackioUser)
     role = db.Column(db.String(16), nullable=False)
-    token = db.Column(db.String(64), unique=True, nullable=False, default=lambda: secrets.token_hex(32))
+    # Keep the old column for database/backup compatibility; clients use the account token.
+    _legacy_token = db.Column("token", db.String(64), unique=True, nullable=False, default=lambda: secrets.token_hex(32))
     __table_args__ = (db.CheckConstraint("role IN ('owner', 'editor', 'viewer')"),)
+
+    @property
+    def token(self):
+        return self.user.write_token
 
 
 class UserInvitation(db.Model):
@@ -298,7 +303,7 @@ def authenticate():
     if request.endpoint in ("proxy_personal", "proxy_project"):
         request.max_content_length = 100 * 1024 * 1024
         return
-    if request.endpoint == "trackio_auth":
+    if request.endpoint in ("trackio_auth", "client_auth"):
         return
     if request.method == "POST":
         supplied = request.form.get("csrf_token", "")
@@ -378,7 +383,63 @@ def personal_projects():
         except (OSError, ValueError):
             app.logger.exception("Could not list personal experiment projects")
             abort(500, t("无法读取个人实验项目，请检查管理日志", "Could not list personal projects. Check the management log"))
-        return render_template("personal_projects.html", projects=projects, running=is_running(g.user))
+        candidates = TrackioUser.query.filter(TrackioUser.password_hash.is_not(None),
+                                              TrackioUser.id != g.user.id).order_by(TrackioUser.username).all()
+        return render_template("personal_projects.html", projects=projects, running=is_running(g.user), candidates=candidates)
+
+
+@app.post("/personal/projects/share")
+def share_personal_project():
+    with instance_lock():
+        db.session.refresh(g.user)
+        if is_running(g.user):
+            abort(409, t("请先暂停训练并停止个人实例，再邀请协作者", "Pause training and stop the personal instance before inviting collaborators"))
+        root = Path(g.user.data_dir)
+        name = request.form.get("project", "")
+        if name not in project_names(root):
+            abort(404, t("个人实验项目不存在", "Personal experiment project not found"))
+        if not re.fullmatch(USERNAME_PATTERN, name):
+            abort(400, t("请先在 Dashboard 将项目改为符合团队项目规则的名称", "Rename the project in the dashboard to use a valid team project name first"))
+        user = TrackioUser.query.filter_by(username=request.form.get("username", "").strip()).first()
+        role = request.form.get("role")
+        if not user or not user.password_hash or user.id == g.user.id or role not in ("editor", "viewer"):
+            abort(400, t("请选择已有用户及编辑或只读权限", "Choose an existing user and an editor or viewer role"))
+        if SharedProject.query.filter_by(owner_id=g.user.id, name=name).first():
+            abort(409, t("已存在同名团队项目", "A team project with this name already exists"))
+        try:
+            port = get_free_port()
+        except RuntimeError as exc:
+            abort(503, str(exc))
+        project_id = secrets.token_hex(16)
+        destination = root / "projects" / project_id
+        project = SharedProject(id=project_id, name=name, owner=g.user, port=port,
+                                write_token=secrets.token_hex(32), data_dir=str(destination))
+        command = [sys.executable, str(BASE_DIR / "personal_projects.py"), str(root), name]
+        moved = False
+        try:
+            db.session.add(project)
+            db.session.add_all([ProjectMember(project=project, user=g.user, role="owner"),
+                                ProjectMember(project=project, user=user, role=role)])
+            db.session.flush()
+            result = subprocess.run([*command, "--share-to", str(destination)], capture_output=True, text=True)
+            if result.returncode:
+                raise RuntimeError(result.stderr.strip())
+            moved = True
+            db.session.commit()
+        except (OSError, RuntimeError, SQLAlchemyError):
+            db.session.rollback()
+            if moved:
+                try:
+                    result = subprocess.run([*command, "--restore-from", str(destination)], capture_output=True, text=True)
+                    if result.returncode:
+                        app.logger.error("Personal project restore failed: %s", result.stderr)
+                except OSError:
+                    app.logger.exception("Could not restore personal project data")
+            app.logger.exception("Personal project sharing failed")
+            abort(500, t("转换未完成，请检查管理日志及项目目录", "Conversion did not complete. Check the management log and project directories"))
+    flash(t("已邀请 {username}，项目数据已保留；原个人上报 URL 和账号 Token 继续可用。启动团队实例后协作者即可访问。",
+            "Invited {username}. Data is preserved and your original personal URL and account token still work. Start the team instance for collaborators.", username=user.username))
+    return redirect(url_for("project_detail", project_id=project_id))
 
 
 @app.post("/personal/projects/delete")
@@ -600,9 +661,9 @@ def trackio_auth():
     return "", 204, {"X-Trackio-Port": str(backend.port), "X-Trackio-Token": token}
 
 
-def backend_access(path, method, expected_origin):
+def backend_access(path, method, expected_origin, *, require_running=True):
     if path.startswith("/p/"):
-        return shared_project_auth(path, method, expected_origin)
+        return shared_project_auth(path, method, expected_origin, require_running=require_running)
     match = re.fullmatch(r"/u/(" + USERNAME_PATTERN + r")(?:/.*)?", path)
     if not match:
         abort(403)
@@ -620,7 +681,7 @@ def backend_access(path, method, expected_origin):
         origin = request.headers.get("Origin")
         if request.headers.get("Sec-Fetch-Site") == "cross-site" or (origin and origin != expected_origin):
             abort(403)
-    if not is_running(user):
+    if require_running and not is_running(user):
         abort(503, t("实验实例未运行，请返回管理面板启动实例", "The experiment instance is not running. Start it from the management panel"))
     return user, user.write_token
 
@@ -640,7 +701,7 @@ PROJECT_READ_APIS = frozenset({
 })
 
 
-def shared_project_auth(path, method, expected_origin):
+def shared_project_auth(path, method, expected_origin, *, require_running=True):
     match = re.fullmatch(r"/p/([a-f0-9]{32})(/.*)", path)
     if not match:
         abort(403)
@@ -649,7 +710,8 @@ def shared_project_auth(path, method, expected_origin):
         abort(403)
     token = request.headers.get("X-Trackio-Write-Token", "")
     if token:
-        member = ProjectMember.query.filter_by(project_id=project.id, token=token).first()
+        user = TrackioUser.query.filter_by(write_token=token).first()
+        member = db.session.get(ProjectMember, (project.id, user.id)) if user else None
     else:
         member = db.session.get(ProjectMember, (project.id, g.user.id)) if g.user else None
         origin = request.headers.get("Origin")
@@ -661,14 +723,23 @@ def shared_project_auth(path, method, expected_origin):
         resource = match[2]
         read_api = method == "POST" and resource.startswith("/api/") and resource[5:] in PROJECT_READ_APIS
         read_file = method in ("GET", "HEAD") and (
-            resource in ("/", "/version", "/file", "/config.json", "/__trackio/frontend_version")
+            resource in ("/", "/version", "/file", "/config.json", "/__trackio/frontend_version", "/__tracknest/auth")
             or resource.startswith(("/static/trackio/", "/artifact_blob/", "/assets/"))
         )
         if not read_api and not read_file:
             abort(403)
-    if not is_running(project):
+    if require_running and not is_running(project):
         abort(503, t("实验实例未运行，请返回项目管理页面启动实例", "The experiment instance is not running. Start it from the project management page"))
     return project, project.write_token if member.role != "viewer" else ""
+
+
+@app.get("/u/<username>/__tracknest/auth")
+@app.get("/p/<project_id>/__tracknest/auth")
+def client_auth(username=None, project_id=None):
+    if not request.headers.get("X-Trackio-Write-Token"):
+        abort(401)
+    backend, _ = backend_access(request.path, "GET", request.host_url.rstrip("/"), require_running=False)
+    return {"authenticated": True, "instance_running": is_running(backend)}
 
 
 
@@ -792,9 +863,17 @@ def remove_project_member(project_id, user_id):
 @app.post("/projects/<project_id>/token")
 def rotate_project_token(project_id):
     with instance_lock():
-        member = project_membership(project_id)
-        member.token = secrets.token_hex(32)
+        project_membership(project_id)
+        running = is_running(g.user)
+        stop_trackio(g.user)
+        g.user.write_token = secrets.token_hex(32)
         db.session.commit()
+        if running:
+            try:
+                start_trackio(g.user)
+            except (OSError, RuntimeError) as exc:
+                app.logger.exception("Personal instance restart after token rotation failed")
+                flash(str(exc))
     return redirect(url_for("project_detail", project_id=project_id))
 
 
