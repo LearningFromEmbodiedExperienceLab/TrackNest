@@ -11,16 +11,18 @@ import sys
 import time
 from contextlib import contextmanager
 from importlib.util import find_spec
+from io import BytesIO
 
 import click
 import requests
-from flask import Blueprint, Flask, Response, abort, flash, g, redirect, render_template, request, send_from_directory, session, stream_with_context, url_for
+from flask import Blueprint, Flask, Response, abort, flash, g, redirect, render_template, request, send_file, send_from_directory, session, stream_with_context, url_for
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 from storage_config import storage_paths
 from personal_projects import project_names
+from client_distribution import CLIENT_WHEEL_NAME, build_client_wheel
 
 BASE_DIR = Path(__file__).resolve().parent
 STATE_DIR, DATA_ROOT = storage_paths()
@@ -303,7 +305,7 @@ def authenticate():
         expected = session.get("csrf_token", "")
         if not expected or not secrets.compare_digest(supplied.encode(), expected.encode()):
             abort(400, t("无效的 CSRF Token，请刷新页面", "Invalid CSRF token. Refresh the page and try again"))
-    if request.endpoint not in ("login", "register", "inspect_registration", "set_language", "static", "ui.static", "trackio_asset") and not g.user:
+    if request.endpoint not in ("login", "register", "inspect_registration", "set_language", "static", "ui.static", "trackio_asset", "client_wheel") and not g.user:
         return redirect(url_for("login"))
 
 
@@ -324,7 +326,8 @@ def t(zh, en, **values):
 def template_helpers():
     if "csrf_token" not in session:
         session["csrf_token"] = secrets.token_hex(32)
-    return {"csrf_token": session["csrf_token"], "is_running": is_running, "t": t}
+    return {"csrf_token": session["csrf_token"], "is_running": is_running, "t": t,
+            "client_wheel_name": CLIENT_WHEEL_NAME}
 
 
 @app.post("/language")
@@ -512,6 +515,12 @@ def register():
 def trackio_asset(filename):
     # The upstream frontend uses root-relative URLs for its public loading logos.
     return send_from_directory(Path(find_spec("trackio").origin).parent / "assets", filename)
+
+
+@app.get(f"/client/{CLIENT_WHEEL_NAME}")
+def client_wheel():
+    return send_file(BytesIO(build_client_wheel()), mimetype="application/zip",
+                     as_attachment=True, download_name=CLIENT_WHEEL_NAME)
 
 
 @app.post("/add")

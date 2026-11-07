@@ -30,9 +30,9 @@ def test_script_lifecycle_and_pid_safety(tmp_path):
     gateway = ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
     public_port = gateway.server_port
     threading.Thread(target=gateway.serve_forever, daemon=True).start()
-    for name in ("app.py", "trackio_server.py", "data_transfer.py", "storage_config.py", "script_output.py", "personal_projects.py"):
+    for name in ("app.py", "trackio_server.py", "data_transfer.py", "storage_config.py", "script_output.py", "personal_projects.py", "client_distribution.py"):
         shutil.copy(BASE_DIR / name, root / name)
-    for name in (".venv", "templates", "static"):
+    for name in (".venv", "templates", "static", "client"):
         (root / name).symlink_to(BASE_DIR / name, target_is_directory=True)
     for name in ("start.sh", "stop.sh", "status.sh"):
         script = (BASE_DIR / name).read_text()

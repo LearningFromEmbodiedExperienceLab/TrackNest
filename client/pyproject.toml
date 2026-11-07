@@ -4,10 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tracknest-client"
-version = "0.1.0"
+version = "0.1.2"
 description = "Persistent TrackNest connection settings and upload status for Trackio"
 requires-python = ">=3.10"
 dependencies = ["trackio==0.45.0"]
+
+[project.scripts]
+tracknest = "tracknest:main"
 
 [tool.setuptools]
 py-modules = ["tracknest"]

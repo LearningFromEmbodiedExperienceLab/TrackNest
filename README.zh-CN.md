@@ -59,20 +59,34 @@ sudo nginx -t && sudo systemctl reload nginx
 
 在训练机器保持隧道运行，例如 `ssh -N -L 9000:localhost:9000 PCL-4090-syw`，然后访问 <http://localhost:9000/login>，登录并启动个人或团队实例。个人空间支持多个 project；更换 `trackio.init(project=...)` 的名称时，上报 URL 和 Token 不变。
 
-使用已安装 `trackio==0.45.0` 的训练 Python，在 TrackNest 仓库目录安装一次薄客户端，然后配置一次连接（团队空间使用页面显示的 `/p/<项目ID>/` URL）：
+保持 SSH 隧道连接，在任意目录下载服务器提供的客户端 wheel，使用训练 Python 安装并配置一次连接（直接访问服务器时替换域名；团队空间使用页面显示的 `/p/<项目ID>/` URL）：
 
 ```bash
-python -m pip install --no-build-isolation --no-deps ./client
-python -m tracknest login --server-url http://localhost:9000/u/<用户名>/
+curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.2-py3-none-any.whl
+python -m pip install --upgrade ./tracknest_client-0.1.2-py3-none-any.whl
+tracknest login --server-url http://localhost:9000/u/<用户名>/
 ```
 
 按提示输入页面上的 Token。配置保存在 `~/.config/tracknest/client.json`（支持 `XDG_CONFIG_HOME`），文件权限为 `0600`；切换空间或重置 Token 后重新运行 login。无需每次设置 URL、Token 或 NO_PROXY。
 
 训练脚本只需把导入改为 `import tracknest as trackio`，其余 `init/log/finish` 代码保持原样。之后可从任意目录直接运行 `python test.py`，无需进入仓库目录。客户端只对已配置的 TrackNest 连接使用 `trust_env=False`，不修改 HTTP/SOCKS 代理环境变量，不影响训练下载或其他请求。
 
-终端会显示连接验证、已上传的指标条数、结束时的同步等待及结果。服务器不可连接或 Token 无效时，初始化直接报错；训练中断网时保留 Trackio 的本地缓存，并明确提示同步未完成，下次初始化同一 project 时重试。服务器确认的条数是本次进程累计的上报指标条数，也可能包含重传的缓存。
+终端状态日志使用英文，带蓝色 `tracknest:` 前缀：连接和进度为青色，成功为绿色，待传提醒为黄色，上传错误为红色。重定向输出或设置 `NO_COLOR` 时自动关闭颜色。日志包含连接验证、已上传的指标条数、结束时的同步等待及结果。服务器不可连接或 Token 无效时，初始化直接报错；训练中断网时保留 Trackio 的本地缓存，并明确提示同步未完成，下次初始化同一 project 时重试。服务器确认的条数是本次进程累计的上报指标条数，也可能包含重传的缓存。
 
 未使用薄客户端的原生 `import trackio` 仍按 Trackio 自身规则工作：没有远端 URL 就只写本地，也不会自动读取上述配置。若设置了 `TRACKIO_SPACE_ID`，需先取消它以使用 TrackNest。管理端对本机实例的启动检查和转发请求会绕过环境代理；实例未运行时返回 503，凭据或权限错误仍返回 401/403。
+
+## 客户端状态查看
+
+安装后使用同一训练环境中的命令，无需进入仓库目录：
+
+```bash
+tracknest status                  # 配置路径、连接鉴权、本地待传缓存
+tracknest projects                # 当前空间内的远端 project 列表
+tracknest runs my-project-test    # Run 名称、ID 和创建时间
+tracknest --help
+```
+
+也支持 `python -m tracknest status` 等同名命令，以明确使用指定的 Python 环境。查询只读，继续保留训练代理，不显示 Token。`status` 即使无法连接服务器，也会检查当前服务器对应的本地缓存；缓存数量不包含仍在训练进程内存中的上传队列。配置缺失、连接或查询失败、缓存无法完整读取时退出码为 1；正常查询为 0，存在待传缓存时显示提醒。CLI 不启动或停止实例，也不自动重传数据。
 
 ## 查看状态和日志
 

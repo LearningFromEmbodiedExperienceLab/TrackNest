@@ -84,6 +84,8 @@ http {{
         assert checked.returncode == 0, checked.stderr.decode()
         procs.append(subprocess.Popen([binary, "-c", str(conf), "-p", str(tmp_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         wait_for(f"{public}/login")
+        from test_client_distribution import check_wheel_install
+        check_wheel_install(public, tmp_path)
         with requests.Session() as browser:
             browser.trust_env = False
             assert browser.get(f"{public}/u/alice/").status_code == 401

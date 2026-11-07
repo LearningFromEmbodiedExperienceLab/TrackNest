@@ -1,16 +1,20 @@
 """Use ``import tracknest as trackio`` after ``python -m tracknest login``."""
 import argparse
 from collections import Counter
+from contextlib import closing
 from functools import wraps
 import getpass
 import importlib
 import json
 import os
 from pathlib import Path
+import sqlite3
+import sys
 import tempfile
 import time
 from urllib.parse import urlencode, urlsplit
 
+import httpx2
 import trackio as _sdk
 from trackio.remote_client import RemoteClient as _RemoteClient
 from trackio.sqlite_storage import SQLiteStorage
@@ -20,8 +24,24 @@ _uploaded = Counter()
 _last_report = {}
 
 
+def _status(message, kind="info"):
+    prefix = "tracknest: "
+    if sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+        color = {"info": "36", "success": "32", "warning": "33", "error": "31"}[kind]
+        prefix = "\033[1;34mtracknest\033[0m: "
+        message = f"\033[{color}m{message}\033[0m"
+    print(prefix + message, flush=True)
+
+
 def _config_path():
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "tracknest/client.json"
+
+
+def _read_config():
+    path = _config_path()
+    if not path.exists():
+        raise RuntimeError("Run tracknest login --server-url <personal-or-team-URL> first")
+    return json.loads(path.read_text())
 
 
 class _DirectClient(_RemoteClient):
@@ -36,39 +56,36 @@ class _DirectClient(_RemoteClient):
             result = super().predict(*args, api_name=api_name, **kwargs)
         except Exception as error:
             if self._tracknest and api_name.startswith("/bulk_"):
-                print(f"[TrackNest] 上传失败，数据将保留本地待重试：{error}", flush=True)
+                _status(f"Upload failed; data will be buffered locally for retry: {error}", "error")
             raise
         if self._tracknest and api_name == "/bulk_log":
             for project, count in Counter(row["project"] for row in kwargs.get("logs", [])).items():
                 _uploaded[project] += count
                 now = time.monotonic()
                 if now - _last_report.get(project, float("-inf")) >= 5:
-                    print(f"[TrackNest] {project}：本次进程已上传 {_uploaded[project]} 条指标", flush=True)
+                    _status(f"{project}: uploaded {_uploaded[project]} metric records in this process")
                     _last_report[project] = now
         return result
 
 
 def _connect():
     global _server_url
-    path = _config_path()
-    if not path.exists():
-        raise RuntimeError("请先运行 python -m tracknest login --server-url <个人或团队空间URL>")
-    config = json.loads(path.read_text())
+    config = _read_config()
     _server_url = config["server_url"]
     _sdk.RemoteClient = _DirectClient
     importlib.import_module("trackio.run").RemoteClient = _DirectClient
-    print(f"[TrackNest] 正在连接 {_server_url}（仅上报连接绕过代理）", flush=True)
+    _status(f"Connecting to {_server_url} (only TrackNest uploads bypass proxies)")
     _DirectClient(_server_url, write_token=config["token"], verbose=False)
-    print("[TrackNest] 已连接，Token 验证通过", flush=True)
+    _status("Connected. Token verified.", "success")
     return config
 
 
 def init(*args, **kwargs):
     if kwargs.get("space_id") or os.environ.get("TRACKIO_SPACE_ID"):
-        raise ValueError("TrackNest 使用自托管服务器，请移除 space_id / TRACKIO_SPACE_ID")
+        raise ValueError("TrackNest uses a self-hosted server; remove space_id / TRACKIO_SPACE_ID")
     config = _connect()
     if "server_url" in kwargs:
-        raise ValueError("服务器地址由 python -m tracknest login 配置，无需向 init 传入 server_url")
+        raise ValueError("Configure the server with python -m tracknest login instead of passing server_url to init")
     kwargs["server_url"] = config["server_url"] + "?" + urlencode({"write_token": config["token"]})
     run = _sdk.init(*args, **kwargs)
     # Trackio 0.45 starts this flag as False even when an earlier process buffered data.
@@ -82,7 +99,7 @@ def init(*args, **kwargs):
         nonlocal finished
         if finished:
             return
-        print(f"[TrackNest] {run.project}/{run.name}：正在等待上传完成…", flush=True)
+        _status(f"{run.project}/{run.name}: waiting for uploads to finish...")
         original_finish()
         thread = run._client_thread
         pending = (thread is not None and thread.is_alive()) or SQLiteStorage.has_pending_data(run.project)
@@ -90,9 +107,9 @@ def init(*args, **kwargs):
             pending = pending or bool(run._sending_batch or run._queued_logs or run._queued_system_logs
                                       or run._queued_uploads or run._queued_alerts or run._has_local_buffer)
         if pending:
-            print(f"[TrackNest] {run.project}：同步未完成；本地仍有待传数据，下次初始化同一 project 时重试", flush=True)
+            _status(f"{run.project}: sync incomplete; pending data remains. Initialize the same project to retry.", "warning")
         else:
-            print(f"[TrackNest] {run.project}：同步完成，本次进程已上传 {_uploaded[run.project]} 条指标", flush=True)
+            _status(f"{run.project}: sync complete; uploaded {_uploaded[run.project]} metric records in this process", "success")
         finished = True
 
     run.finish = finish_run
@@ -103,11 +120,7 @@ def __getattr__(name):
     return getattr(_sdk, name)
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Configure TrackNest once for subsequent training runs")
-    parser.add_argument("command", choices=["login"])
-    parser.add_argument("--server-url", required=True)
-    args = parser.parse_args()
+def _login(args, parser):
     url = urlsplit(args.server_url)
     if url.scheme not in ("http", "https") or not url.netloc or url.query or url.fragment or url.username:
         parser.error("Use the http(s) personal/team URL without a token or query string")
@@ -121,8 +134,84 @@ def main():
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as file:
         json.dump({"server_url": server_url, "token": token}, file)
     os.replace(file.name, path)
-    print(f"[TrackNest] 已验证并保存配置：{path}（仅当前用户可读写）")
+    _status(f"Connection verified. Settings saved to {path} (readable and writable only by your user).", "success")
+
+
+def _pending_status(server_url):
+    root = SQLiteStorage.get_project_db_path("_").parent
+    _status(f"Local cache: {root}")
+    found, readable = False, True
+    for path in sorted(root.glob("*.db")):
+        if path.name.startswith("registry-"):
+            continue
+        try:
+            with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=3)) as connection:
+                counts = []
+                for table in ("metrics", "system_metrics", "traces", "pending_uploads"):
+                    columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+                    count = connection.execute(
+                        f"SELECT COUNT(*) FROM {table} WHERE rtrim(space_id, '/') = ?",
+                        (server_url.rstrip("/"),),
+                    ).fetchone()[0] if "space_id" in columns else 0
+                    counts.append(count)
+            if any(counts):
+                found = True
+                _status(f"{path.stem}: pending {counts[0]} metrics, {counts[1]} system records, "
+                        f"{counts[2]} traces, {counts[3]} files", "warning")
+        except (OSError, sqlite3.Error) as error:
+            readable = False
+            _status(f"Cannot inspect {path.name}: {error}", "warning")
+    if not found and readable:
+        _status("Local pending cache is empty for this server.", "success")
+    _status("Cache counts exclude in-memory uploads in running training processes.")
+    return readable
+
+
+def main():
+    parser = argparse.ArgumentParser(prog="tracknest", description="TrackNest training client")
+    commands = parser.add_subparsers(dest="command", required=True)
+    login = commands.add_parser("login", help="Save and verify your server connection")
+    login.add_argument("--server-url", required=True)
+    commands.add_parser("status", help="Check connection and local pending data")
+    commands.add_parser("projects", help="List remote projects")
+    runs = commands.add_parser("runs", help="List runs in a remote project")
+    runs.add_argument("project")
+    args = parser.parse_args()
+    try:
+        if args.command == "login":
+            _login(args, parser)
+            return 0
+        config = _read_config()
+        if args.command == "status":
+            _status(f"Config: {_config_path()}")
+            _status(f"Server: {config['server_url']}")
+            reachable = True
+            try:
+                _RemoteClient(config["server_url"], write_token=config["token"],
+                              httpx_kwargs={"trust_env": False}, verbose=False)
+                _status("Connection: connected; token verified.", "success")
+            except (OSError, httpx2.HTTPError, ValueError, RuntimeError) as error:
+                reachable = False
+                _status(f"Connection: unavailable ({error})", "error")
+            readable = _pending_status(config["server_url"])
+            return 0 if reachable and readable else 1
+        remote = _RemoteClient(config["server_url"], write_token=config["token"],
+                               httpx_kwargs={"trust_env": False}, verbose=False)
+        if args.command == "projects":
+            projects = remote.predict(api_name="/get_all_projects")
+            _status(f"Remote projects: {len(projects)}")
+            for project in projects:
+                print(f"  {project}")
+        else:
+            records = remote.predict(args.project, api_name="/get_runs_for_project")
+            _status(f"Runs in {args.project}: {len(records)}")
+            for record in records:
+                print(f"  {record['name']}  id={record['id']}  created={record['created_at'] or '-'}")
+        return 0
+    except (OSError, httpx2.HTTPError, ValueError, RuntimeError) as error:
+        _status(str(error), "error")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

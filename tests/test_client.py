@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import sqlite3
 import stat
 import threading
 from types import SimpleNamespace
@@ -37,9 +38,80 @@ def test_login_verifies_before_saving_private_config(client_module, monkeypatch,
     assert config["token"] == "private-token"
     assert "private-token" not in capsys.readouterr().out
     remote.side_effect = ConnectionError("unreachable")
-    with pytest.raises(ConnectionError):
-        module.main()
+    assert module.main() == 1
     assert json.loads(path.read_text()) == config
+
+
+@pytest.mark.parametrize("connected", [True, False])
+def test_cli_status_reports_destination_scoped_pending_data_without_writes(client_module, monkeypatch, tmp_path, capsys, connected):
+    module = client_module
+    config = {"server_url": "http://localhost:9000/u/alice/", "token": "private-token"}
+    monkeypatch.setattr(module, "_read_config", lambda: config)
+    remote = Mock(side_effect=None if connected else ConnectionError("connection refused"))
+    monkeypatch.setattr(module, "_RemoteClient", remote)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    database = cache / "buffered-project.db"
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE metrics (space_id TEXT)")
+        db.executemany("INSERT INTO metrics VALUES (?)", [(config["server_url"],),
+                       (config["server_url"].rstrip("/"),), ("http://other-server/u/alice/",), (None,)])
+        db.execute("CREATE TABLE pending_uploads (space_id TEXT)")
+        db.execute("INSERT INTO pending_uploads VALUES (?)", (config["server_url"],))
+    before = database.read_bytes()
+    monkeypatch.setattr(module.SQLiteStorage, "get_project_db_path", lambda project: cache / f"{project}.db")
+    monkeypatch.setattr("sys.argv", ["tracknest", "status"])
+    assert module.main() == (0 if connected else 1)
+    output = capsys.readouterr().out
+    assert "pending 2 metrics, 0 system records, 0 traces, 1 files" in output
+    assert "exclude in-memory uploads" in output
+    assert "private-token" not in output
+    assert ("Connection: connected" in output) == connected
+    assert database.read_bytes() == before
+    assert set(cache.iterdir()) == {database}
+    assert remote.call_args.kwargs["httpx_kwargs"] == {"trust_env": False}
+
+
+def test_cli_without_configuration_exits_with_login_instructions(client_module, monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["tracknest", "status"])
+    assert client_module.main() == 1
+    output = capsys.readouterr().out
+    assert "tracknest login" in output and "Traceback" not in output
+
+
+def test_cli_status_does_not_claim_empty_cache_when_a_database_is_unreadable(client_module, monkeypatch, tmp_path, capsys):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    monkeypatch.setattr(module, "_RemoteClient", Mock())
+    (tmp_path / "broken.db").write_bytes(b"not a database")
+    monkeypatch.setattr(module.SQLiteStorage, "get_project_db_path", lambda project: tmp_path / f"{project}.db")
+    monkeypatch.setattr("sys.argv", ["tracknest", "status"])
+    assert module.main() == 1
+    output = capsys.readouterr().out
+    assert "Cannot inspect broken.db" in output
+    assert "cache is empty" not in output
+
+
+@pytest.mark.parametrize("command,expected,api", [
+    (["projects"], "experiment", "/get_all_projects"),
+    (["runs", "experiment"], "baseline  id=run-1", "/get_runs_for_project"),
+])
+def test_cli_remote_queries_do_not_modify_proxy_environment(client_module, monkeypatch, capsys, command, expected, api):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    client = Mock()
+    client.predict.return_value = ["experiment"] if command[0] == "projects" else [
+        {"name": "baseline", "id": "run-1", "created_at": "2026-11-07T12:00:00Z"}]
+    remote = Mock(return_value=client)
+    monkeypatch.setattr(module, "_RemoteClient", remote)
+    monkeypatch.setenv("ALL_PROXY", "socks://127.0.0.1:29674/")
+    monkeypatch.setattr("sys.argv", ["tracknest", *command])
+    before = dict(os.environ)
+    assert module.main() == 0
+    assert expected in capsys.readouterr().out
+    assert client.predict.call_args.kwargs["api_name"] == api
+    assert remote.call_args.kwargs["httpx_kwargs"] == {"trust_env": False}
+    assert dict(os.environ) == before
 
 
 def test_only_tracknest_connection_bypasses_proxy(client_module, monkeypatch):
@@ -57,7 +129,7 @@ def test_only_tracknest_connection_bypasses_proxy(client_module, monkeypatch):
 
 
 @pytest.mark.parametrize("pending,active,expected", [
-    (False, False, "同步完成"), (True, False, "同步未完成"), (False, True, "同步未完成"),
+    (False, False, "sync complete"), (True, False, "sync incomplete"), (False, True, "sync incomplete"),
 ])
 def test_finish_reports_pending_data_and_active_uploads(client_module, monkeypatch, capsys, pending, active, expected):
     module = client_module
@@ -74,7 +146,7 @@ def test_finish_reports_pending_data_and_active_uploads(client_module, monkeypat
     output = capsys.readouterr().out
     assert expected in output
     if pending or active:
-        assert "：同步完成" not in output
+        assert ": sync complete" not in output
 
 
 def test_failed_batch_does_not_report_upload_success(client_module, capsys):
@@ -85,7 +157,23 @@ def test_failed_batch_does_not_report_upload_success(client_module, capsys):
         with pytest.raises(ConnectionError):
             client.predict(api_name="/bulk_log", logs=[{"project": "experiment"}])
     assert not module._uploaded
-    assert "上传失败" in capsys.readouterr().out
+    assert "Upload failed" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("tty,no_color,colored", [(True, False, True), (False, False, False), (True, True, False)])
+def test_english_status_colors_respect_terminal_and_no_color(client_module, monkeypatch, capsys, tty, no_color, colored):
+    module = client_module
+    monkeypatch.setattr(module.sys.stdout, "isatty", lambda: tty)
+    if no_color:
+        monkeypatch.setenv("NO_COLOR", "1")
+    else:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+    module._status("Connected. Token verified.", "success")
+    module._status("Upload failed", "error")
+    output = capsys.readouterr().out
+    assert "tracknest" in output and "Connected. Token verified." in output
+    assert ("\033[32m" in output) == colored
+    assert ("\033[31m" in output) == colored
 
 
 def check_persistent_client(public, alice, tmp_path):
@@ -130,9 +218,9 @@ assert os.environ.get("NO_PROXY") == before.get("NO_PROXY")
 '''
         result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=45)
         assert result.returncode == 0, result.stderr
-        assert "已连接" in result.stdout and "同步完成" in result.stdout
+        assert "Connected" in result.stdout and "sync complete" in result.stdout
         count = 50 if project == "client-first-project" else 25
-        assert f"已上传 {count} 条指标" in result.stdout
+        assert f"uploaded {count} metric records" in result.stdout
         assert "Unknown scheme" not in result.stderr and "saved locally" not in result.stderr
     remote = RemoteClient(public + "/u/alice/", write_token=alice.write_token, httpx_kwargs={"trust_env": False})
     projects = remote.predict(api_name="/get_all_projects")

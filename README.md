@@ -59,20 +59,34 @@ Only the shared entry point needs external access. Creating users or team projec
 
 Keep the tunnel running on the training machine, for example `ssh -N -L 9000:localhost:9000 PCL-4090-syw`. Open [http://localhost:9000/login](http://localhost:9000/login), sign in, and start the personal or team instance. Personal spaces support multiple projects: changing `trackio.init(project=...)` does not change the upload URL or token.
 
-Using your training Python with `trackio==0.45.0` installed, install the thin client once from the TrackNest checkout, then configure the connection once. For team spaces, use the `/p/<project-id>/` URL shown on the project page:
+Keep the SSH tunnel connected, download the client wheel from the server into any directory, then install and configure it once with your training Python. Replace the host for direct server access. For team spaces, use the `/p/<project-id>/` URL shown on the project page:
 
 ```bash
-python -m pip install --no-build-isolation --no-deps ./client
-python -m tracknest login --server-url http://localhost:9000/u/<username>/
+curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.2-py3-none-any.whl
+python -m pip install --upgrade ./tracknest_client-0.1.2-py3-none-any.whl
+tracknest login --server-url http://localhost:9000/u/<username>/
 ```
 
 Enter the token from the page when prompted. Settings are saved in `~/.config/tracknest/client.json` (respecting `XDG_CONFIG_HOME`) with mode `0600`. Run login again after changing spaces or rotating the token. No per-terminal URL, token, or NO_PROXY setup is needed.
 
 Change the training import to `import tracknest as trackio`; keep the existing `init/log/finish` calls. Run `python test.py` from any directory afterward. Only the configured TrackNest connection uses `trust_env=False`; HTTP/SOCKS proxy environment variables and other training/download requests remain unchanged.
 
-The terminal reports connection verification, acknowledged metric counts, upload waiting, and the final synchronization result. Initialization fails immediately if the server or token is invalid. If connectivity fails during training, Trackio keeps its local buffer and the client reports incomplete synchronization; initializing the same project retries buffered data. Counts cover acknowledged metrics in the current process, including replayed buffers.
+Status logs are in English with a blue `tracknest:` prefix: cyan for connection/progress, green for success, yellow for pending-data warnings, and red for upload failures. Redirected output and `NO_COLOR` disable colors. Logs report connection verification, acknowledged metric counts, upload waiting, and the final synchronization result. Initialization fails immediately if the server or token is invalid. If connectivity fails during training, Trackio keeps its local buffer and the client reports incomplete synchronization; initializing the same project retries buffered data. Counts cover acknowledged metrics in the current process, including replayed buffers.
 
 Native `import trackio` retains its own behavior: it does not read this configuration and writes locally without a remote URL. Unset `TRACKIO_SPACE_ID` when using TrackNest. The manager bypasses environment proxies for instance startup checks and forwarded requests. Stopped instances return 503; invalid credentials or permissions return 401/403.
+
+## Client status commands
+
+Use these commands from your training environment, without entering the repository:
+
+```bash
+tracknest status                  # Configuration, authenticated connection, pending local cache
+tracknest projects                # Remote projects in the configured space
+tracknest runs my-project-test    # Run names, IDs, and creation times
+tracknest --help
+```
+
+The same commands work with `python -m tracknest`, for example `python -m tracknest status`, to select a specific Python environment. Queries are read-only, preserve training proxies, and never display the token. `status` checks the cache for the configured server even while offline; counts exclude in-memory upload queues in active training processes. Missing configuration, connection/query failures, or unreadable cache databases return exit code 1. Successful queries return 0, with a warning if pending cache exists. The CLI does not start/stop instances or trigger uploads.
 
 ## Check status and logs
 
