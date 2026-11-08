@@ -6,10 +6,11 @@
             <thead><tr><th scope="col">{{ t('项目', 'Project') }}</th><th scope="col">{{ t('我的权限', 'My role') }}</th><th scope="col">{{ t('状态', 'Status') }}</th></tr></thead>
             <tbody>
             {% for m in memberships %}
+            {% set running = is_running(m.project) %}
             <tr>
-                <td><a href="{{ url_for('project_detail', project_id=m.project_id) }}">{{ m.project.name }}</a><div class="ui-hint">{{ m.project.owner.username }}</div></td>
+                <td><a class="project-name" href="{{ url_for('project_detail', project_id=m.project_id) }}">{{ m.project.name }}</a><div class="ui-hint">{{ m.project.owner.username }}</div></td>
                 <td>{{ t('所有者', 'Owner') if m.role == 'owner' else (t('编辑', 'Editor') if m.role == 'editor' else t('只读', 'Viewer')) }}</td>
-                <td><span class="ui-status {{ 'ui-status--active' if is_running(m.project) else '' }}">{{ t('运行中', 'Running') if is_running(m.project) else t('已停止', 'Stopped') }}</span></td>
+                <td><span class="ui-status {{ 'ui-status--active' if running else '' }}">{{ t('运行中', 'Running') if running else t('已停止', 'Stopped') }}</span></td>
             </tr>
             {% endfor %}
             </tbody>
@@ -18,11 +19,14 @@
     {% else %}
     <p class="ui-panel-body ui-hint">{{ t('创建一个团队项目，或请项目所有者添加你的账号。', 'Create a team project or ask its owner to add your account.') }}</p>
     {% endif %}
-    <form class="ui-panel-body ui-stack" action="{{ url_for('create_project') }}" method="post">
+    <details class="ui-disclosure panel-disclosure" {{ 'open' if not memberships else '' }}>
+    <summary>{{ t('创建团队项目', 'Create team project') }}</summary>
+    <form class="ui-disclosure-body ui-stack" action="{{ url_for('create_project') }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label class="ui-field" for="project-name">{{ t('新团队项目名称', 'New team project name') }}
             <input id="project-name" class="ui-input" name="name" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}" placeholder="{{ t('例如 team-baseline', 'e.g. team-baseline') }}" required>
         </label>
         <div class="ui-form-footer"><p class="ui-hint">{{ t('创建后仅自己可见，可邀请已注册用户协作。', 'Projects start private. Invite registered users to collaborate.') }}</p><button class="ui-button" type="submit">{{ t('创建团队项目', 'Create team project') }}</button></div>
     </form>
+    </details>
 </section>

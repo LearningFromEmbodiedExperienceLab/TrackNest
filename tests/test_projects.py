@@ -42,6 +42,22 @@ def test_project_creation_isolation_and_port_reservation(users, project):
     assert owner.post("/projects", data={"name": "unsafe"}).status_code == 400
 
 
+@pytest.mark.parametrize("role", ["owner", "editor", "viewer"])
+def test_connection_instructions_use_current_account_and_respect_viewer_role(users, project, role):
+    actor = "alice" if role == "owner" else "bob"
+    if actor == "bob":
+        db.session.add(ProjectMember(project=project, user_id=users[actor].id, role=role))
+        db.session.commit()
+    client = app.test_client()
+    login(client, actor)
+    page = client.get(f"/projects/{project.id}")
+    assert page.status_code == 200
+    assert f'tracknest login --server-url "http://localhost/p/{project.id}/"'.encode() in page.data
+    assert users[actor].write_token.encode() in page.data
+    assert all(user.write_token.encode() not in page.data for name, user in users.items() if name != actor)
+    assert (f'trackio.init(project="{project.name}", name="baseline")'.encode() in page.data) == (role != "viewer")
+
+
 def test_membership_management_roles_and_credentials(users, project):
     owner = owner_client()
     url = f"/projects/{project.id}"
@@ -130,6 +146,46 @@ def test_project_client_login_accepts_viewer_token_while_stopped_and_rejects_rev
         assert client.get(path, headers={"X-Trackio-Write-Token": project.write_token}).status_code == 403
         post(owner, f"/projects/{project.id}/members/{users['bob'].id}/remove")
         assert client.get(path, headers={"X-Trackio-Write-Token": token}).status_code == 403
+        start.assert_not_called()
+
+
+@pytest.mark.parametrize("role,action,allowed", [
+    ("owner", "start", True), ("owner", "stop", True),
+    ("editor", "start", True), ("editor", "stop", False),
+    ("viewer", "start", False), ("viewer", "stop", False),
+    (None, "start", False), (None, "stop", False),
+])
+def test_client_team_instance_permissions(users, project, role, action, allowed):
+    if role in ("editor", "viewer"):
+        db.session.add(ProjectMember(project=project, user_id=users["bob"].id, role=role))
+        db.session.commit()
+    token = users["alice" if role == "owner" else "bob"].write_token
+    path = f"/p/{project.id}/__tracknest/instance"
+    with patch("app.start_trackio") as start, patch("app.stop_trackio") as stop, \
+            patch("app.is_running", return_value=action == "start"):
+        response = app.test_client().post(path, json={"action": action}, headers={"X-Trackio-Write-Token": token})
+        assert response.status_code == (200 if allowed else 403)
+        if allowed:
+            assert response.json == {"instance_running": action == "start"}
+            (start if action == "start" else stop).assert_called_once_with(project)
+            (stop if action == "start" else start).assert_not_called()
+        else:
+            start.assert_not_called()
+            stop.assert_not_called()
+
+
+def test_client_team_instance_rejects_revoked_and_backend_tokens(users, project):
+    path = f"/p/{project.id}/__tracknest/instance"
+    db.session.add(ProjectMember(project=project, user_id=users["bob"].id, role="editor"))
+    db.session.commit()
+    token = users["bob"].write_token
+    post(owner_client(), f"/projects/{project.id}/members/{users['bob'].id}/remove")
+    with patch("app.start_trackio") as start:
+        client = app.test_client()
+        assert client.post(path, json={"action": "start"}).status_code == 401
+        for invalid in (token, project.write_token):
+            assert client.post(path, json={"action": "start"},
+                               headers={"X-Trackio-Write-Token": invalid}).status_code == 403
         start.assert_not_called()
 
 

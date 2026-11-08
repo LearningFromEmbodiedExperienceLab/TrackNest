@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}{{ t('用户管理', 'User management') }}{% endblock %}
 {% block content %}
-<div class="page-heading"><div><a class="ui-hint" href="{{ url_for('index') }}">← {{ t('返回我的工作空间', 'Back to my panel') }}</a><h1>{{ t('用户管理', 'User management') }}</h1><p class="ui-muted">{{ t('生成注册链接，由用户自行设置密码。', 'Generate registration links so users can set their own passwords.') }}</p></div><a class="ui-button ui-button--secondary" href="#invite-user">{{ t('邀请新用户', 'Invite a new user') }}</a></div>
+<div class="page-heading"><div><a class="ui-hint" href="{{ url_for('index') }}">← {{ t('返回我的工作空间', 'Back to my panel') }}</a><h1>{{ t('用户管理', 'User management') }}</h1><p class="ui-muted">{{ t('生成注册链接，由用户自行设置密码。', 'Generate registration links so users can set their own passwords.') }}</p></div></div>
 <section class="ui-panel account-list">
     <div class="ui-pane-heading"><h2 class="panel-title">{{ t('账号列表', 'Accounts') }}</h2></div>
     <div class="ui-table-wrap"><table class="ui-table accounts-table">
-        <thead><tr><th>{{ t('用户名', 'Username') }}</th><th>{{ t('角色', 'Role') }}</th><th>{{ t('注册状态', 'Registration') }}</th><th>{{ t('操作', 'Actions') }}</th></tr></thead>
+        <thead><tr><th>{{ t('用户名', 'Username') }}</th><th>{{ t('角色', 'Role') }}</th><th>{{ t('注册状态', 'Registration') }}</th><th class="actions-heading">{{ t('操作', 'Actions') }}</th></tr></thead>
         <tbody>{% for u in users %}<tr>
-            <td class="account-cell"><div class="account-summary"><span class="user-name ui-mono">{{ u.username }}</span><span class="ui-hint">{{ u.nickname or t('未设置昵称', 'No nickname') }}</span></div>
+            <td class="account-cell"><div class="account-entry"><div class="account-summary"><span class="user-name ui-mono">{{ u.username }}</span><span class="ui-hint">{{ u.nickname or t('未设置昵称', 'No nickname') }}</span></div>
                 <details class="ui-disclosure account-editor"><summary>{{ t('编辑账号', 'Edit account') }}</summary><div class="ui-disclosure-body"><form class="ui-stack" action="{{ url_for('edit_user', uid=u.id) }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <label class="ui-field" for="username-{{ u.id }}">{{ t('用户名', 'Username') }}<input id="username-{{ u.id }}" class="ui-input" name="username" value="{{ u.username }}" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}" required></label>
@@ -15,7 +15,7 @@
                 <button class="ui-button ui-button--secondary" type="submit">{{ t('更新账号', 'Update account') }}</button>
             </form>
                 <p class="ui-hint">{{ t('改用户名之前，请停止该用户的个人实例和其拥有的团队项目。数据目录会随之改名，个人实验上报 URL 需更新；密码、Token 和成员权限保留。', 'Before renaming, stop the user’s personal instance and owned team projects. The data directory is renamed and personal upload URLs must be updated. Passwords, tokens and memberships are preserved.') }}</p>
-                </div></details></td><td>{{ t('管理员', 'Administrator') if u.is_admin else t('用户', 'User') }}</td><td>{{ t('已注册', 'Registered') if u.password_hash else t('待注册', 'Pending') }}</td>
+                </div></details></div></td><td>{{ t('管理员', 'Administrator') if u.is_admin else t('用户', 'User') }}</td><td>{{ t('已注册', 'Registered') if u.password_hash else t('待注册', 'Pending') }}</td>
             <td><div class="row-actions">
                 {% if not u.password_hash %}<form action="{{ url_for('renew_user_invitation', uid=u.id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="ui-button ui-button--secondary" type="submit">{{ t('重新生成邀请', 'Regenerate invitation') }}</button></form>{% endif %}
                 {% if not u.is_admin %}<form action="{{ url_for('delete', uid=u.id) }}" method="post" data-delete-user
@@ -30,8 +30,10 @@
 <section class="ui-panel invite-panel" id="invite-user">
     <div class="ui-pane-heading"><h2 class="panel-title">{{ t('邀请新用户', 'Invite a new user') }}</h2></div>
     <form class="ui-panel-body ui-stack" action="{{ url_for('add_user') }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-columns">
         <label class="ui-field" for="new-username">{{ t('用户名', 'Username') }}<input id="new-username" class="ui-input" name="username" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}" required></label>
         <label class="ui-field" for="new-nickname">{{ t('昵称（可选）', 'Nickname (optional)') }}<input id="new-nickname" class="ui-input" name="nickname" maxlength="64"></label>
+        </div>
         <div class="ui-form-footer"><p class="ui-hint">{{ t('注册完成后，用户即可登录个人工作空间，并加入项目。', 'After registering, users can sign in to their panel and join projects.') }}</p><button class="ui-button" type="submit">{{ t('生成邀请链接', 'Generate invitation link') }}</button></div>
     </form>
 </section>

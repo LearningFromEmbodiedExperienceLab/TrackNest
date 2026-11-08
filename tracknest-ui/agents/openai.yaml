@@ -1,0 +1,3 @@
+interface:
+  display_name: "TrackNest UI"
+  short_description: "Reuse the versioned TrackNest UI design system"

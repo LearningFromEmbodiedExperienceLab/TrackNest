@@ -8,6 +8,12 @@ All users share one login page and get their own Panel to create team projects, 
 
 Administrators can edit their own username and other users’ usernames in User Management, and set optional nicknames when inviting users. Users can click their account name in the header to edit their own nickname. Project invitations and member lists show `username (nickname)` when a nickname is set. Before renaming a username, stop that user’s personal instance and owned team projects. Renaming moves their data directory and preserves passwords, tokens, and memberships; update personal experiment upload URLs afterward.
 
+## Reuse the UI design
+
+[`tracknest-ui/`](tracknest-ui/) is the self-contained design package. `VERSION` records the current `1.0.0` release, `CHANGELOG.md` records changes, `assets/` holds components, layouts, light/dark themes, the theme script, icons and standalone HTML examples, and `references/` contains the contract and visual reference. TrackNest serves these assets directly at `/static/ui/`; business pages remain in `templates/`.
+
+Copy the entire `tracknest-ui/` folder into your personal skills directory to invoke `$tracknest-ui` in another project. The skill guides copying the assets and version file before adding that project's content and interactions; consuming projects do not upgrade automatically. See [`SKILL.md`](tracknest-ui/SKILL.md). To preview, run `python -m http.server 9188 --bind 127.0.0.1` inside `assets/` and open `example.html` for components or `workspace.html` for the layout.
+
 ## First-time setup
 
 Requires Linux, Python 3.10+, and Nginx. Run the following commands from `<path-to>/tracknest`, using the same system account throughout.
@@ -57,13 +63,13 @@ Only the shared entry point needs external access. Creating users or team projec
 
 ## Log training through an SSH tunnel
 
-Keep the tunnel running on the training machine, for example `ssh -N -L 9000:localhost:9000 PCL-4090-syw`. Open [http://localhost:9000/login](http://localhost:9000/login), sign in, and start the personal or team instance. Personal spaces support multiple projects: changing `trackio.init(project=...)` does not change the upload URL or token.
+Keep the tunnel running on the training machine, for example `ssh -N -L 9000:localhost:9000 PCL-4090-syw`. Open [http://localhost:9000/login](http://localhost:9000/login), sign in to get the personal or team URL and token. Personal spaces support multiple projects: changing `trackio.init(project=...)` does not change the upload URL or token.
 
 Keep the SSH tunnel connected, download the client wheel from the server into any directory, then install and configure it once with your training Python. Replace the host for direct server access. For team spaces, use the `/p/<project-id>/` URL shown on the project page:
 
 ```bash
-curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.3-py3-none-any.whl
-python -m pip install --upgrade ./tracknest_client-0.1.3-py3-none-any.whl
+curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.6-py3-none-any.whl
+python -m pip install --upgrade ./tracknest_client-0.1.6-py3-none-any.whl
 tracknest login --server-url http://localhost:9000/u/<username>/
 ```
 
@@ -71,7 +77,7 @@ Enter the token from the page when prompted. Settings are saved in `~/.config/tr
 
 Each account has one client token for its personal space and every team project. Membership determines read/write access to each team project. Rotating the account token invalidates its old credentials across all spaces. Older project-specific tokens are no longer used for authentication; existing team clients should log in again with the account token shown on the page.
 
-`login` verifies credentials with the manager and succeeds even when the experiment instance is stopped. It never starts the instance. Start the instance from the web panel before training or querying experiment data; `status` reports authentication and instance state separately.
+`login` verifies credentials with the manager and succeeds even when the experiment instance is stopped. It never starts the instance. `tracknest.init()` automatically starts a stopped instance and waits until it is ready before initializing training logs. Use `tracknest start` before querying experiment data; `status` reports authentication and instance state separately. `finish()` does not stop the instance.
 
 Change the training import to `import tracknest as trackio`; keep the existing `init/log/finish` calls. Run `python test.py` from any directory afterward. Only the configured TrackNest connection uses `trust_env=False`; HTTP/SOCKS proxy environment variables and other training/download requests remain unchanged.
 
@@ -79,18 +85,28 @@ Status logs are in English with a blue `tracknest:` prefix: cyan for connection/
 
 Native `import trackio` retains its own behavior: it does not read this configuration and writes locally without a remote URL. Unset `TRACKIO_SPACE_ID` when using TrackNest. The manager bypasses environment proxies for instance startup checks and forwarded requests. Stopped instances return 503; invalid credentials or permissions return 401/403.
 
-## Client status commands
+## Client status and instance commands
 
 Use these commands from your training environment, without entering the repository:
 
 ```bash
-tracknest status                  # Configuration, authenticated connection, pending local cache
+tracknest status                  # Configuration, authentication, instance state, pending local cache
+tracknest start                   # Start the configured instance and wait until ready
+tracknest stop                    # Stop the configured instance; affects all its training uploads
 tracknest projects                # Remote projects in the configured space
 tracknest runs my-project-test    # Run names, IDs, and creation times
+tracknest status --lang zh        # Chinese output (English by default)
+tracknest --version               # Installed client version
 tracknest --help
 ```
 
-The same commands work with `python -m tracknest`, for example `python -m tracknest status`, to select a specific Python environment. Queries are read-only, preserve training proxies, and never display the token. `status` checks the cache for the configured server even while offline; counts exclude in-memory upload queues in active training processes. Missing configuration, connection/query failures, stopped instances in `status`, or unreadable cache databases return exit code 1. Successful queries return 0, with a warning if pending cache exists. The CLI does not start/stop instances or trigger uploads.
+The same commands work with `python -m tracknest`, for example `python -m tracknest status`, to select a specific Python environment. Queries are read-only, preserve training proxies, and never display the token. `status` checks the cache for the configured server even while offline; counts exclude in-memory upload queues in active training processes. Missing configuration, connection/query failures, stopped instances in `status`, or unreadable cache databases return exit code 1. Successful queries return 0, with a warning if pending cache exists. `start` and `stop` manage the instance selected by the saved login URL; repeated requests are safe. Personal instances can be managed with their account token. Team owners and editors can start instances (including automatically during training); only owners can stop them, and viewers can only query state. Stop training uploads before running `stop`, since it affects every run using that instance. Instance management does not replay cached data; initializing the same project retries pending uploads. Update both the server and client to use these features.
+
+Terminal output is fully colored: verified credentials and running instances are green; stopped instances and unavailable authentication are red. Headings, labels, paths, tables, and hints also use colors. Redirected output and `NO_COLOR` remain plain text. Each command leaves one blank line before and after its output.
+
+CLI output defaults to English. Add `--lang zh` before or after any subcommand, such as `tracknest --lang zh projects` or `tracknest start --lang zh`. Status groups connection information and presents pending uploads in an aligned table with totals; projects and runs also use tables. Stopped instances produce a short `tracknest start` instruction before the SDK is contacted. HTTP and connection failures use concise messages instead of Space diagnostics and HTTP documentation links.
+
+Use `tracknest --version` to check the client installed in your training environment. If it still says to start instances from the web panel, upgrade to `0.1.6` using the wheel commands above with the same Python used for training. The server must be updated to provide the new wheel and instance-management API.
 
 ## Check status and logs
 
@@ -140,7 +156,7 @@ Before backing up, stop the application completely as described below, then copy
 1. Stop training uploads, run `./stop.sh` on the old machine, and confirm that management and all experiment instances have stopped.
 2. Copy the complete `instance/` and `data/` directories into the new machine's project directory or selected storage root, preserving symlinks. For custom storage, copy the actual directories printed by the scripts and select their destination using `--storage-dir` or the corresponding environment variables. Keep both `manager.db` and `secret.key`.
 3. Deploy the same project version on the new machine, recreate `.venv`, install `requirements.txt`, and configure Nginx as described in First-time setup. Do not copy the old virtual environment or recreate the administrator. Make sure the new system account can read and write the copied files.
-4. Run `./start.sh` and `./status.sh`. For custom storage, include the same `--storage-dir` option. Startup updates stored data paths, converts internal compatibility links to relative links, and clears stale PID records. Accounts, passwords, team memberships, tokens, and experiment data are preserved. Start experiment instances manually when needed.
+4. Run `./start.sh` and `./status.sh`. For custom storage, include the same `--storage-dir` option. Startup updates stored data paths, converts internal compatibility links to relative links, and clears stale PID records. Accounts, passwords, team memberships, tokens, and experiment data are preserved. Start experiment instances from the Panel, with `tracknest start`, or automatically when training initializes.
 
 Use whole-deployment migration for an empty deployment. Do not overwrite another deployment's existing accounts with the old `manager.db`. You can verify the migration using a backup copy first. Deployment and data directories may differ from the old machine's paths. To update paths manually before startup, run `.venv/bin/flask --app app relocate-data`. Internal instance ports retain their assigned values; ensure those ports are available on the new machine.
 
@@ -174,7 +190,7 @@ Stop management and every user/project experiment instance while preserving data
 
 If Gunicorn was previously started manually, press Ctrl+C in its original terminal and wait for it to exit before switching to the scripts. Then run `stop.sh` to clean up experiment instances and use `start.sh` to start management. The scripts do not stop unidentified processes using port 9001. Nginx is managed separately by the system and is not started or stopped by these scripts.
 
-To restart, run `./stop.sh`, followed by `./start.sh`. For custom storage, include the original `--storage-dir` option when starting. Log in to start stopped experiment instances manually. All three scripts can be called from any working directory and print the current management and experiment data directories. Use the same system account and storage environment variables throughout.
+To restart, run `./stop.sh`, followed by `./start.sh`. For custom storage, include the original `--storage-dir` option when starting. Stopped experiment instances can be started from the Panel, with `tracknest start`, or automatically when training initializes. All three scripts can be called from any working directory and print the current management and experiment data directories. Use the same system account and storage environment variables throughout.
 
 Scripts output English by default. Add `--lang zh` for Chinese; this can be combined with `--storage-dir` when starting:
 

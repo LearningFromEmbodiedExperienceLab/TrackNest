@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Workspace layout · TrackNest UI</title>
+    <script src="theme.js"></script>
+    <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<header class="site-header">
+    <div class="header-inner">
+        <a class="brand" href="workspace.html"><span class="brand-mark" aria-hidden="true">e.</span><span>Example</span></a>
+        <div class="header-actions">
+            <a class="header-link" href="example.html">Component reference</a>
+            <span class="account-label"><span>Sample user</span><span class="ui-hint ui-mono">researcher</span></span>
+            <div class="header-tools">
+                <button id="theme" class="ui-theme-toggle" type="button" aria-label="Switch to dark mode">
+                    <svg class="ui-icon" data-theme-icon="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    <svg class="ui-icon" data-theme-icon="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</header>
+<main class="page-shell">
+    <div class="page-heading"><div><h1>Your workspace</h1><p class="ui-muted">Static layout reference. Adapt the content and actions to your project.</p></div></div>
+    <div class="workspace-grid">
+        <div class="workspace-main">
+            <section class="ui-panel" aria-labelledby="overview-title">
+                <div class="ui-pane-heading"><h2 id="overview-title">Personal space</h2><a class="ui-pane-heading-meta section-link" href="#projects">View projects →</a></div>
+                <div class="ui-panel-body ui-stack">
+                    <div class="instance-row">
+                        <div class="instance-identity"><span class="user-name ui-mono">researcher</span><span class="ui-status ui-status--active">Running</span></div>
+                        <div class="row-actions"><a class="ui-button" href="#projects">View projects →</a><button class="ui-button ui-button--danger" type="button" disabled>Stop</button></div>
+                    </div>
+                    <p class="ui-hint">Keep the primary action visible and supporting information close to it.</p>
+                </div>
+            </section>
+            <section class="ui-panel" id="projects" aria-labelledby="projects-title">
+                <div class="ui-pane-heading"><h2 id="projects-title">Projects</h2><span class="ui-pane-heading-meta">2</span></div>
+                <div class="ui-table-wrap"><table class="ui-table">
+                    <thead><tr><th scope="col">Project</th><th scope="col">Your role</th><th scope="col">Status</th></tr></thead>
+                    <tbody>
+                        <tr><td><span class="project-name">vision-baseline</span><div class="ui-hint">Research team</div></td><td>Owner</td><td><span class="ui-status ui-status--active">Running</span></td></tr>
+                        <tr><td><span class="project-name">language-model</span><div class="ui-hint">Research team</div></td><td>Editor</td><td><span class="ui-status">Stopped</span></td></tr>
+                    </tbody>
+                </table></div>
+                <details class="ui-disclosure panel-disclosure"><summary>Create a project</summary><div class="ui-disclosure-body ui-stack">
+                    <label class="ui-field" for="project-name">Project name<input id="project-name" class="ui-input" placeholder="e.g. team-baseline"></label>
+                    <div class="ui-form-footer"><p class="ui-hint">This static example has no backend.</p><button class="ui-button" type="button" disabled>Create project</button></div>
+                </div></details>
+            </section>
+            <section class="ui-panel" aria-labelledby="members-title">
+                <div class="ui-pane-heading"><h2 id="members-title">Members</h2><span class="ui-pane-heading-meta">1</span></div>
+                <div class="ui-table-wrap"><table class="ui-table members-table">
+                    <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col" class="actions-heading">Actions</th></tr></thead>
+                    <tbody><tr><td class="member-name">Sample user</td><td>Owner</td><td class="member-actions">—</td></tr></tbody>
+                </table></div>
+                <div class="ui-panel-body member-invite">
+                    <label class="ui-field" for="member-user">User<select id="member-user" class="ui-input"><option>Choose a user</option></select></label>
+                    <label class="ui-field" for="member-role">Role<select id="member-role" class="ui-input member-role"><option>Viewer</option><option>Editor</option></select></label>
+                    <button class="ui-button" type="button" disabled>Add member</button>
+                </div>
+            </section>
+        </div>
+        <section class="ui-panel connection-panel" aria-labelledby="setup-title">
+            <div class="ui-pane-heading"><h2 id="setup-title">Getting started</h2></div>
+            <div class="ui-panel-body ui-stack">
+                <details class="ui-disclosure connection-step"><summary><span class="step-number" aria-hidden="true">1</span>Install your client</summary><div class="ui-disclosure-body"><p class="ui-hint">Place the product's installation instructions here. Show details when needed.</p></div></details>
+                <div class="connection-step ui-stack">
+                    <h3 class="step-heading"><span class="step-number" aria-hidden="true">2</span>Connect your workspace</h3>
+                    <pre class="ui-code"><code>your-client connect --url https://example.test/workspace/</code></pre>
+                    <p class="ui-hint">Keep the next step short and avoid repeating instructions.</p>
+                    <details class="ui-disclosure token-disclosure"><summary>View sample token</summary><div class="ui-disclosure-body"><pre class="ui-code"><code>example-token-not-a-credential</code></pre></div></details>
+                </div>
+                <details class="ui-disclosure connection-step"><summary><span class="step-number" aria-hidden="true">3</span>Start your work</summary><div class="ui-disclosure-body"><p class="ui-hint">Use this area for a short example of the primary workflow.</p></div></details>
+                <p class="credential-note ui-hint">Keep everyday actions visible. Put occasional details in disclosures.</p>
+            </div>
+        </section>
+    </div>
+</main>
+</body>
+</html>

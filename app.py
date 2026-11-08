@@ -38,7 +38,7 @@ else:
         f.write(secrets.token_hex(32))
 
 app = Flask(__name__)
-app.register_blueprint(Blueprint("ui", __name__, static_folder="templates/ui", static_url_path="/static/ui"))
+app.register_blueprint(Blueprint("ui", __name__, static_folder="tracknest-ui/assets", static_url_path="/static/ui"))
 app.config.update(
     SECRET_KEY=key_path.read_text(),
     SQLALCHEMY_DATABASE_URI=f"sqlite:///{STATE_DIR / 'manager.db'}",
@@ -303,7 +303,7 @@ def authenticate():
     if request.endpoint in ("proxy_personal", "proxy_project"):
         request.max_content_length = 100 * 1024 * 1024
         return
-    if request.endpoint in ("trackio_auth", "client_auth"):
+    if request.endpoint in ("trackio_auth", "client_auth", "client_instance"):
         return
     if request.method == "POST":
         supplied = request.form.get("csrf_token", "")
@@ -740,6 +740,30 @@ def client_auth(username=None, project_id=None):
         abort(401)
     backend, _ = backend_access(request.path, "GET", request.host_url.rstrip("/"), require_running=False)
     return {"authenticated": True, "instance_running": is_running(backend)}
+
+
+@app.post("/u/<username>/__tracknest/instance")
+@app.post("/p/<project_id>/__tracknest/instance")
+def client_instance(username=None, project_id=None):
+    if not request.headers.get("X-Trackio-Write-Token"):
+        abort(401)
+    payload = request.get_json(silent=True)
+    action = payload.get("action") if isinstance(payload, dict) else None
+    if action not in ("start", "stop"):
+        abort(400)
+    with instance_lock():
+        db.session.expire_all()
+        backend, _ = backend_access(request.path, "POST", request.host_url.rstrip("/"), require_running=False)
+        if project_id and action == "stop":
+            user = TrackioUser.query.filter_by(write_token=request.headers["X-Trackio-Write-Token"]).first()
+            if user.id != backend.owner_id:
+                abort(403)
+        try:
+            (start_trackio if action == "start" else stop_trackio)(backend)
+        except (OSError, RuntimeError) as exc:
+            app.logger.exception("Client instance %s failed", action)
+            abort(503, str(exc))
+        return {"instance_running": is_running(backend)}
 
 
 

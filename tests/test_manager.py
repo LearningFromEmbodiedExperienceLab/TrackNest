@@ -19,6 +19,8 @@ def test_login_and_private_dashboard(users):
     assert users["bob"].write_token.encode() not in page.data
     assert users["admin"].write_token.encode() not in page.data
     assert b"/u/bob/" not in page.data
+    assert b'tracknest login --server-url "http://localhost/u/alice/"' in page.data
+    assert b'trackio.init(project="my-project", name="baseline")' in page.data
     assert page.headers["Cache-Control"] == "no-store"
     assert users["alice"].password_hash != "test-password-123"
     assert check_password_hash(users["alice"].password_hash, "test-password-123")
@@ -129,6 +131,47 @@ def test_stale_pid_never_signaled(users):
         stop_trackio(user)
         kill.assert_not_called()
     assert user.pid == 0
+
+
+@pytest.mark.parametrize("action", ["start", "stop"])
+def test_client_instance_requires_own_token_even_with_browser_session(users, action):
+    client = app.test_client()
+    path = "/u/alice/__tracknest/instance"
+    login(client, "alice")
+    with patch("app.start_trackio") as start, patch("app.stop_trackio") as stop, \
+            patch("app.is_running", return_value=action == "start"):
+        assert client.post(path, json={"action": action}).status_code == 401
+        for name in ("bob", "admin"):
+            assert client.post(path, json={"action": action},
+                               headers={"X-Trackio-Write-Token": users[name].write_token}).status_code == 403
+        start.assert_not_called()
+        stop.assert_not_called()
+        response = client.post(path, json={"action": action},
+                               headers={"X-Trackio-Write-Token": users["alice"].write_token})
+        assert response.status_code == 200
+        assert response.json == {"instance_running": action == "start"}
+        assert users["alice"].write_token.encode() not in response.data
+        (start if action == "start" else stop).assert_called_once_with(users["alice"])
+        (stop if action == "start" else start).assert_not_called()
+
+
+@pytest.mark.parametrize("payload", [{}, {"action": "restart"}, [], ["start"], "start", None])
+def test_client_instance_rejects_invalid_actions(users, payload):
+    with patch("app.start_trackio") as start, patch("app.stop_trackio") as stop:
+        response = app.test_client().post("/u/alice/__tracknest/instance", json=payload,
+                                          headers={"X-Trackio-Write-Token": users["alice"].write_token})
+        assert response.status_code == 400
+        start.assert_not_called()
+        stop.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["start", "stop"])
+@pytest.mark.parametrize("error", [OSError("process error"), RuntimeError("startup timed out")])
+def test_client_instance_reports_process_failures(users, action, error):
+    with patch("app." + ("start_trackio" if action == "start" else "stop_trackio"), side_effect=error):
+        response = app.test_client().post("/u/alice/__tracknest/instance", json={"action": action},
+                                          headers={"X-Trackio-Write-Token": users["alice"].write_token})
+        assert response.status_code == 503
 
 
 def test_legacy_database_migration(ctx):

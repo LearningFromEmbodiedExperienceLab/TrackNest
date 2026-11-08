@@ -129,7 +129,9 @@ http {{
         check_persistent_client(public, alice, tmp_path)
         stop_trackio(alice)
         check_login_while_stopped(public, alice, tmp_path)
-        start_trackio(alice)
+        from app import db, is_running
+        db.session.refresh(alice)
+        assert is_running(alice)
         assert "private-project" in a.predict(api_name="/get_all_projects")
         check_shared_project(public, users, tmp_path)
         check_personal_project_sharing(public, users, tmp_path)
@@ -164,7 +166,30 @@ raise SystemExit(tracknest.main())
     result = subprocess.run([sys.executable, "-m", "tracknest", "status"], env=environment,
                             capture_output=True, text=True, timeout=15)
     assert result.returncode == 1
-    assert "Authentication: verified" in result.stdout and "Instance: stopped" in result.stdout
+    assert re.search(r"Authentication:\s+verified", result.stdout) and re.search(r"Instance:\s+stopped", result.stdout)
+    for language in ("en", "zh"):
+        result = subprocess.run([sys.executable, "-m", "tracknest", "projects", "--lang", language], env=environment,
+                                capture_output=True, text=True, timeout=15)
+        assert result.returncode == 1
+        assert "tracknest start" in result.stdout and "Space" not in result.stdout and "503" not in result.stdout
+        assert ("实例尚未启动" in result.stdout) == (language == "zh")
+    for command, expected in (("start", "running"), ("start", "running"), ("stop", "stopped"), ("stop", "stopped")):
+        result = subprocess.run([sys.executable, "-m", "tracknest", command], env=environment,
+                                capture_output=True, text=True, timeout=45)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert f"Instance: {expected}." in result.stdout
+    code = '''import tracknest as trackio
+trackio.init(project="auto-start", name="baseline", auto_log_gpu=False, auto_log_cpu=False)
+trackio.log({"loss": 0.25}, step=1)
+trackio.finish()
+'''
+    result = subprocess.run([sys.executable, "-c", code], env=environment,
+                            capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Starting it before training" in result.stdout and "sync complete" in result.stdout
+    remote = RemoteClient(public + "/u/alice/", write_token=alice.write_token, httpx_kwargs={"trust_env": False})
+    logs = remote.predict("auto-start", "baseline", api_name="/get_logs")
+    assert len(logs) == 1 and logs[0]["loss"] == 0.25
 
 
 def check_personal_project_sharing(public, users, tmp_path):
@@ -242,23 +267,23 @@ def check_shared_project(public, users, tmp_path):
             "csrf_token": csrf(owner, path), "username": "bob", "role": "editor",
         }, timeout=5)
         assert response.status_code == 200
-        response = owner.post(public + path + "/instance", data={
-            "csrf_token": csrf(owner, path), "action": "start",
-        }, timeout=45)
+        response = owner.get(public + path, timeout=5)
         assert response.status_code == 200
         shared_example = html.unescape(re.search(r"<code>(import tracknest.*?)</code>", response.text, re.S)[1])
-        assert "x_axis=iteration" in response.text
         db.session.expire_all()
         alice_token = db.session.get(ProjectMember, (project_id, users["alice"].id)).token
         bob_token = db.session.get(ProjectMember, (project_id, users["bob"].id)).token
         backend = public + f"/p/{project_id}/"
         assert requests.get(backend, timeout=5).status_code == 401
         assert requests.get(backend, headers={"X-Trackio-Write-Token": project.write_token}, timeout=5).status_code == 403
-        for run, token in (("alice-run", alice_token), ("bob-run", bob_token)):
+        for run, token in (("bob-run", bob_token), ("alice-run", alice_token)):
             code = shared_example.replace('name="baseline"', f'name="{run}"')
-            subprocess.run([sys.executable, "-c", code],
-                           env=training_environment(backend, token, tmp_path),
-                           check=True, capture_output=True, timeout=30)
+            result = subprocess.run([sys.executable, "-c", code],
+                                    env=training_environment(backend, token, tmp_path),
+                                    capture_output=True, text=True, timeout=45)
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert ("Starting it before training" in result.stdout) == (run == "bob-run")
+        assert "x_axis=iteration" in owner.get(public + path, timeout=5).text
         shared = RemoteClient(backend, write_token=bob_token)
         assert len(shared.predict("shared-training", api_name="/get_runs_for_project")) == 2
         for run in ("alice-run", "bob-run"):

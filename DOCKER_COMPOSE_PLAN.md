@@ -41,7 +41,7 @@
 | 项目 | 当前情况 | 建议处理 |
 | --- | --- | --- |
 | 应用镜像 | 依赖本机 `.venv` | 新增 Dockerfile，固定已验证的 Python 基础镜像，安装 `requirements.txt`，包含 `app.py`、`storage_config.py`、`script_output.py`、`data_transfer.py`、`personal_projects.py`、`trackio_server.py`、`templates/` 和 `static/` |
-| 构建上下文 | `.gitignore` 不能代替 Docker 构建排除规则 | 新增 `.dockerignore`，排除 `.venv`、实验、管理数据库、备份、凭据和运行日志；保留 `templates/ui/` |
+| 构建上下文 | `.gitignore` 不能代替 Docker 构建排除规则 | 新增 `.dockerignore`，排除 `.venv`、实验、管理数据库、备份、凭据和运行日志；保留 `tracknest-ui/assets/` |
 | Gunicorn | `start.sh` 使用 `--daemon` 和 PID 文件 | 容器内以前台模式运行，保持 `--workers 1 --threads 4 --timeout 60`，绑定 `0.0.0.0:9001` |
 | Nginx 上游 | `127.0.0.1:9001` | 新增容器专用配置，改为 `manager:9001`，保留 Host、限流、上传大小及代理超时配置 |
 | 容器入口 | 暂无 | 新增入口脚本，负责正常启动时的进程状态整理、信号处理及有序停机 |

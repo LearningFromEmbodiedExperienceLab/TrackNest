@@ -1,4 +1,6 @@
-<p class="ui-hint">{{ t('使用训练环境的 Python 安装一次客户端。下载只连接当前服务器，训练代理保持原样。', 'Install the client once using your training Python. The download connects directly to this server; training proxy settings stay unchanged.') }}</p>
+<details class="ui-disclosure connection-step"><summary><span class="step-number" aria-hidden="true">1</span>{{ t('安装客户端', 'Install the client') }}</summary><div class="ui-disclosure-body ui-stack">
+<p class="ui-hint">{{ t('仅首次使用或升级时执行。使用训练环境的 Python，训练代理保持原样。', 'Run once to install or upgrade using your training Python. Training proxy settings stay unchanged.') }}</p>
 <pre class="ui-code"><code>curl --noproxy '*' -fLO "{{ url_for('client_wheel', _external=True) }}"
 python -m pip install --upgrade "./{{ client_wheel_name }}"</code></pre>
 <p class="ui-hint"><a href="{{ url_for('client_wheel') }}">{{ t('也可直接下载客户端 wheel', 'Or download the client wheel directly') }}</a></p>
+</div></details>

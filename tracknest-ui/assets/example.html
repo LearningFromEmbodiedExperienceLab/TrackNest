@@ -4,10 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>UI kit · Component reference</title>
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="ui.css">
-  <script>
-    try { document.documentElement.dataset.theme = localStorage.getItem('ui-theme') === 'dark' ? 'dark' : 'light'; } catch (error) {}
-  </script>
   <style>
     body { padding: 32px 20px; }
     main { max-width: 880px; margin: auto; display: grid; gap: 24px; }
@@ -22,7 +20,7 @@
 <body>
 <main>
   <header class="example-header">
-    <div><p class="ui-kicker">COMPONENT REFERENCE / 组件参考</p><h1>Quiet, useful interfaces.</h1><p class="ui-hint">Warm neutrals, clear hierarchy, small radii. 暖灰配色，清晰层级，小圆角。</p></div>
+    <div><p class="ui-kicker">COMPONENT REFERENCE / 组件参考</p><h1>Quiet, useful interfaces.</h1><p class="ui-hint">Warm neutrals, clear hierarchy, small radii. 暖灰配色，清晰层级，小圆角。</p><a class="ui-hint" href="workspace.html">Workspace layout / 页面布局 →</a></div>
     <button id="theme" class="ui-theme-toggle" type="button" aria-label="Switch theme">
       <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v16A8 8 0 0 0 12 4Z" fill="currentColor"/></svg>
     </button>
@@ -74,12 +72,5 @@
     <h1>Typography / 排版</h1><p>Use one clear heading, short supporting text, and a restrained number of surfaces.</p><blockquote>Keep the interface quiet; let the content carry the hierarchy.</blockquote><p>正文使用系统无衬线字体，代码使用等宽字体。避免渐变、大阴影和过多装饰性卡片。</p>
   </section>
 </main>
-<script>
-  document.getElementById('theme').addEventListener('click', () => {
-    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem('ui-theme', theme); } catch (error) {}
-  });
-</script>
 </body>
 </html>

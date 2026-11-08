@@ -3,6 +3,9 @@
 venv/
 __pycache__/
 *.py[cod]
+/client/build/
+/client/dist/
+/client/*.egg-info/
 
 # Test, lint and coverage output
 .pytest_cache/

@@ -9,64 +9,35 @@
 </div>
 <div class="workspace-grid">
     <div class="workspace-main">
-        {% include 'shared_projects.html' %}
         <section class="ui-panel" aria-labelledby="instances-title">
             <div class="ui-pane-heading">
                 <h2 class="panel-title" id="instances-title">{{ t('个人实验空间', 'Personal experiment space') }}</h2>
-                <span class="ui-pane-heading-meta">{{ users|length }} {{ t('个实例', 'instance' if users|length == 1 else 'instances') }}</span>
+                <a class="ui-pane-heading-meta section-link" href="{{ url_for('personal_projects') }}">{{ t('管理项目', 'Manage projects') }} →</a>
             </div>
-            <div class="ui-table-wrap">
-                <table class="ui-table">
-                    <thead><tr><th scope="col">{{ t('用户', 'User') }}</th><th scope="col">{{ t('状态', 'Status') }}</th><th scope="col" class="actions-heading">{{ t('操作', 'Actions') }}</th></tr></thead>
-                    <tbody>
-                    {% for u in users %}
-                    {% set running = is_running(u) %}
-                    <tr>
-                        <td><span class="user-name ui-mono">{{ u.username }}</span></td>
-                        <td><span class="ui-status {{ 'ui-status--active' if running else '' }}">{{ t('运行中', 'Running') if running else t('已停止', 'Stopped') }}</span></td>
-                        <td>
-                            <div class="row-actions">
-                                {% if running and u.id == g.user.id %}<a class="ui-button ui-button--secondary" href="/u/{{ u.username }}/?x_axis=iteration" target="_blank" rel="noopener">{{ t('实验面板', 'Dashboard') }} ↗</a>{% endif %}
-                                <form action="{{ url_for('stop' if running else 'start', uid=u.id) }}" method="post">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button class="ui-button {{ 'ui-button--danger' if running else '' }}" type="submit" aria-label="{{ t('停止', 'Stop') if running else t('启动', 'Start') }} {{ u.username }}">{{ t('停止', 'Stop') if running else t('启动', 'Start') }}</button>
-                                </form>
-
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+            <div class="ui-panel-body ui-stack">
+                {% for u in users %}
+                {% set running = is_running(u) %}
+                <div class="instance-row">
+                    <div class="instance-identity"><span class="user-name ui-mono">{{ u.username }}</span><span class="ui-status {{ 'ui-status--active' if running else '' }}">{{ t('运行中', 'Running') if running else t('已停止', 'Stopped') }}</span></div>
+                    <div class="row-actions">
+                        {% if running and u.id == g.user.id %}<a class="ui-button" href="/u/{{ u.username }}/?x_axis=iteration" target="_blank" rel="noopener">{{ t('实验面板', 'Dashboard') }} ↗</a>{% endif %}
+                        <form action="{{ url_for('stop' if running else 'start', uid=u.id) }}" method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button class="ui-button {{ 'ui-button--danger' if running else '' }}" type="submit" aria-label="{{ t('停止', 'Stop') if running else t('启动', 'Start') }} {{ u.username }}">{{ t('停止', 'Stop') if running else t('启动', 'Start') }}</button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+                <p class="ui-hint">{{ t('训练初始化时会自动启动实例，停止实例不会删除实验数据。', 'Training init starts the instance automatically. Stopping it preserves experiment data.') }}</p>
             </div>
-            <div class="panel-footnote ui-form-footer"><p class="ui-hint">{{ t('启动后即可打开实验面板。停止实例不会删除实验数据。', 'Start your instance to open the dashboard. Stopping it preserves experiment data.') }}</p><a class="ui-button ui-button--secondary" href="{{ url_for('personal_projects') }}">{{ t('管理实验项目', 'Manage experiment projects') }}</a></div>
         </section>
-
+        {% include 'shared_projects.html' %}
     </div>
     <section class="ui-panel connection-panel" aria-labelledby="connection-title">
         <div class="ui-pane-heading"><h2 class="panel-title" id="connection-title">{{ t('我的训练接入', 'Connect your training') }}</h2></div>
-        <div class="ui-panel-body ui-stack">
-            {% include 'client_install.html' %}
-            <div><h3 class="step-heading ui-kicker">{{ t('使用前需要登录认证', 'Log in to authenticate before use') }}</h3>
-                <pre class="ui-code"><code>tracknest login --server-url "{{ request.host_url }}u/{{ g.user.username }}/"</code></pre>
-                <p class="ui-hint">{{ t('按提示输入下方 Token。配置会保存，无需每次设置环境变量。仅上报连接绕过代理，训练和下载代理保持原样；SSH 隧道仍需保持连接。', 'Enter the token below when prompted. Settings persist across terminals. Only uploads bypass proxies; training and downloads retain their proxy settings. Keep your SSH tunnel connected.') }}</p>
-                <pre class="ui-code"><code>{{ g.user.write_token }}</code></pre>
-            </div>
-            {% include 'client_cli.html' %}
-            <details class="ui-disclosure"><summary>{{ t('训练代码示例 · 25 次迭代', 'Training example · 25 iterations') }}</summary><div class="ui-disclosure-body">
-                <pre class="ui-code"><code>import tracknest as trackio
-
-trackio.init(project="my-project", name="baseline")
-for iteration in range(1, 26):
-    trackio.log({
-        "iteration": iteration,
-        "loss": 1.0 / iteration,
-        "accuracy": 1.0 - 1.0 / (iteration + 1),
-    }, step=iteration)
-trackio.finish()</code></pre>
-            </div></details>
-            <p class="credential-note ui-hint">{{ t('Token 可读写你空间内的全部实验，请妥善保管。', 'Your token grants read and write access to all your experiments. Keep it private.') }}</p>
-        </div>
+        {% with connection_backend=g.user, training_project='my-project' %}
+        {% include 'client_connection.html' %}
+        {% endwith %}
     </section>
 </div>
 {% endblock %}

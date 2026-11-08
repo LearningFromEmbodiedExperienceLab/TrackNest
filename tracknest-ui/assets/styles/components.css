@@ -75,19 +75,20 @@
   display: flex;
   align-items: center;
   gap: var(--ui-space-1);
-  min-height: 48px;
-  padding: 12px 20px;
+  min-height: 56px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--ui-line);
-  background: var(--ui-soft);
+  background: var(--ui-panel);
   font-size: 12px;
 }
 .ui-pane-heading label,
 .ui-pane-heading h2,
-.ui-pane-heading h3 { margin: 0; font-size: 13px; font-weight: 500; }
+.ui-pane-heading h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .ui-pane-heading-meta {
   margin-left: auto;
   color: var(--ui-muted);
-  font: 10px/1.4 var(--ui-font-mono);
+  font-size: 12px;
+  font-weight: 400;
 }
 .ui-prose {
   overflow: auto;
@@ -239,7 +240,7 @@ select.ui-input:disabled { cursor: not-allowed; }
 .ui-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ui-space-1); }
 .ui-table-wrap { overflow-x: auto; }
 .ui-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.ui-table th, .ui-table td { padding: 14px 20px; border-bottom: 1px solid var(--ui-line); text-align: left; vertical-align: middle; }
+.ui-table th, .ui-table td { padding: 16px 24px; border-bottom: 1px solid var(--ui-line); text-align: left; vertical-align: middle; }
 .ui-table th { background: var(--ui-canvas); color: var(--ui-muted); font-size: var(--ui-text-sm); font-weight: 400; white-space: nowrap; }
 .ui-table tbody tr:last-child td { border-bottom: none; }
 .ui-notice { margin: 0; padding: 12px 16px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-md); background: var(--ui-soft); font-size: 13px; overflow-wrap: anywhere; }
@@ -258,8 +259,8 @@ select.ui-input:disabled { cursor: not-allowed; }
 .ui-code { margin: 0; padding: var(--ui-space-2); border: 1px solid var(--ui-line); border-radius: var(--ui-radius-sm); background: var(--ui-canvas); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 var(--ui-font-mono); }
 @media (max-width: 600px) {
   .ui-panel-body { padding: 20px; }
-  .ui-pane-heading { padding: 12px 16px; }
-  .ui-table th, .ui-table td { padding: 12px 16px; }
+  .ui-pane-heading { padding: 16px 20px; }
+  .ui-table th, .ui-table td { padding: 12px 20px; }
   .ui-button, .ui-input { min-height: 44px; }
   .ui-disclosure > summary { min-height: 44px; }
 }

@@ -1,8 +1,13 @@
 <details class="ui-disclosure"><summary>{{ t('TrackNest CLI 使用', 'TrackNest CLI usage') }}</summary><div class="ui-disclosure-body ui-stack">
     <p class="ui-hint">{{ t('完成 login 配置后，在训练环境的终端运行：', 'After configuring login, run these commands in your training environment:') }}</p>
     <pre class="ui-code"><code>tracknest status           # {{ t('鉴权、实例状态和本地待传数据', 'Authentication, instance state and pending cache') }}
+tracknest start            # {{ t('启动实例并等待就绪', 'Start the instance and wait until ready') }}
+tracknest stop             # {{ t('关闭实例，影响该实例的所有训练上报', 'Stop the instance; affects all its training uploads') }}
 tracknest projects         # {{ t('列出项目', 'List projects') }}
 tracknest runs my-project  # {{ t('查看指定项目的 Run，替换为你的项目名', 'List runs; replace my-project with your project name') }}
+tracknest status --lang zh # {{ t('中文状态输出，默认英文', 'Chinese output; English is the default') }}
+tracknest --version        # {{ t('查看已安装客户端版本', 'Show the installed client version') }}
 tracknest --help           # {{ t('查看帮助', 'Show help') }}</code></pre>
-    <p class="ui-hint">{{ t('这些查询不会启动实例或触发上传。也可使用 python -m tracknest 执行相同命令。', 'These queries do not start instances or trigger uploads. You can also run the same commands with python -m tracknest.') }}</p>
+    <p class="ui-hint">{{ t('训练调用 init 时会自动启动已停止的实例并等待就绪，finish 不会关闭实例。login、status、projects、runs 不会启动实例或触发上传。团队实例允许所有者和编辑者启动，仅所有者可关闭。也可使用 python -m tracknest 执行相同命令。', 'Training init automatically starts a stopped instance and waits until ready; finish keeps it running. login, status, projects and runs do not start instances or trigger uploads. Team owners and editors can start an instance; only owners can stop it. You can also use python -m tracknest.') }}</p>
+    <p class="ui-hint">{{ t('所有 CLI 命令默认英文，加 --lang zh 使用中文；参数可放在子命令前后。实例停止时，projects 和 runs 会提示先执行 tracknest start。', 'All CLI commands default to English; add --lang zh before or after the subcommand for Chinese. When the instance is stopped, projects and runs explain how to start it with tracknest start.') }}</p>
 </div></details>

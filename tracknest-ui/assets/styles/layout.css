@@ -1,8 +1,8 @@
-/* Application layout; components and theme colors come from templates/ui. */
+/* Page layouts and interface patterns; colors come from the shared themes. */
 a { color: inherit; }
 h1, h2, h3, p { margin-top: 0; }
 .site-header { border-bottom: 1px solid var(--ui-line); background: var(--ui-panel); }
-.header-inner { max-width: 1328px; min-height: 72px; margin: auto; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.header-inner { max-width: 1280px; min-height: 72px; margin: auto; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; font-size: 21px; font-weight: 600; letter-spacing: -.04em; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--ui-line-strong); border-radius: var(--ui-radius-sm); font: 600 22px var(--ui-font-mono); }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 16px 24px; min-width: 0; }
@@ -10,26 +10,42 @@ h1, h2, h3, p { margin-top: 0; }
 .account-label:hover, .header-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .header-link { font-size: 13px; color: var(--ui-muted); text-decoration: none; }
 .header-tools { display: flex; align-items: center; gap: 16px; flex: none; }
-.page-shell { max-width: 1328px; margin: auto; padding: 36px 32px; }
-.page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 32px; }
-.page-heading h1, .login-heading h1 { margin: 10px 0; font-size: 30px; font-weight: 550; letter-spacing: -.04em; line-height: 1.4; }
+.page-shell { max-width: 1280px; margin: auto; padding: 32px; }
+.page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.page-heading > div { display: grid; gap: 8px; min-width: 0; }
+.page-heading h1, .login-heading h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.035em; line-height: 1.4; overflow-wrap: anywhere; }
 .page-heading p:last-child { margin-bottom: 0; }
-.workspace-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
 .workspace-main { display: grid; gap: 24px; min-width: 0; }
 .workspace-grid > section { min-width: 0; }
 .panel-title { margin: 0; }
+.section-link { text-decoration: none; text-underline-offset: 3px; }
+.section-link:hover { color: var(--ui-ink); text-decoration: underline; }
+.instance-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.instance-identity { display: grid; gap: 8px; min-width: 0; }
+.project-name { font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
+.project-name:hover { text-decoration: underline; }
+.panel-disclosure { padding: 16px 24px; border-top: 1px solid var(--ui-line); }
+.panel-disclosure > summary { padding: 0; min-height: 32px; color: var(--ui-ink); }
 .form-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .user-name { font-size: 12px; overflow-wrap: anywhere; }
 .row-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .row-actions .ui-button { font-size: 12px; white-space: nowrap; }
-.panel-footnote { padding: 16px 20px; border-top: 1px solid var(--ui-line); }
-.step-heading { margin-bottom: 12px; }
+.connection-panel .ui-panel-body { gap: 0; }
+.connection-step { padding: 16px 0; border-bottom: 1px solid var(--ui-line); }
+.connection-step:first-child { padding-top: 0; }
+.connection-step > summary, .step-heading { display: flex; align-items: center; gap: 12px; min-height: 32px; margin: 0; padding: 0; color: var(--ui-ink); font-size: 13px; font-weight: 500; }
+.connection-step.ui-stack { gap: 12px; }
+.step-number { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; color: var(--ui-muted); font: 12px var(--ui-font-mono); }
+.token-disclosure > summary { padding: 0; min-height: 32px; font-size: 12px; }
+.connection-panel .credential-note { margin-top: 8px; }
 .credential-note { border-top: 1px solid var(--ui-line); padding-top: 16px; }
 .notice { margin-bottom: 24px; }
 .login-shell { max-width: 460px; padding-top: 72px; }
-.login-heading { margin-bottom: 32px; }
+.login-heading { display: grid; gap: 8px; margin-bottom: 24px; }
+.login-heading p { margin: 0; }
 .login-heading h1 { font-size: 28px; }
-@media (max-width: 1050px) {
+@media (max-width: 1000px) {
     .workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 600px) {
@@ -41,6 +57,7 @@ h1, h2, h3, p { margin-top: 0; }
     .page-heading { align-items: flex-start; flex-direction: column; gap: 12px; margin-bottom: 24px; }
     .page-heading h1 { font-size: 26px; }
     .form-columns { grid-template-columns: 1fr; }
+    .panel-disclosure { padding: 16px 20px; }
     .row-actions { gap: 8px; }
     .login-shell { padding-top: 48px; }
 }
@@ -48,21 +65,34 @@ h1, h2, h3, p { margin-top: 0; }
 .profile-shell { max-width: 704px; }
 .account-list { margin-bottom: 24px; }
 .account-summary { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.account-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }
 .account-cell { width: 48%; min-width: 220px; }
-.account-editor { max-width: 440px; margin-top: 4px; }
+.account-editor { max-width: 440px; }
+.account-editor > summary { gap: 8px; }
+.account-editor[open] { grid-column: 1 / -1; width: 100%; }
 .account-editor .ui-disclosure-body { display: grid; gap: 16px; padding-bottom: 8px; }
 .account-editor .ui-button { justify-self: start; }
 .accounts-table td:not(:first-child) { white-space: nowrap; }
 .invite-panel .ui-stack { max-width: 680px; }
 .member-role { width: auto; max-width: 180px; }
+.member-name { overflow-wrap: anywhere; }
+.members-table .member-actions { text-align: right; }
+.member-actions > form { display: inline-flex; }
+.member-invite { display: grid; grid-template-columns: minmax(0, 1fr) 100px auto; align-items: end; gap: 16px; border-top: 1px solid var(--ui-line); }
+.member-invite .member-role { width: 100%; }
 .ui-table .actions-heading { text-align: right; }
 .ui-table a { text-underline-offset: 3px; }
 .ui-table .user-name { min-width: 100px; }
-.danger-section { border-color: var(--ui-danger-line); }
+.danger-section { background: transparent; }
+@media (max-width: 600px) {
+  .instance-row .row-actions { justify-content: flex-start; }
+  .member-invite { grid-template-columns: minmax(0, 1fr) auto; }
+  .member-invite > .ui-field:first-of-type { grid-column: 1 / -1; }
+}
 @media (max-width: 700px) {
   .accounts-table thead { display: none; }
   .accounts-table tbody { display: grid; }
-  .accounts-table tr { display: grid; grid-template-columns: 1fr 1fr; padding: 16px; gap: 12px; border-bottom: 1px solid var(--ui-line); }
+  .accounts-table tr { display: grid; grid-template-columns: 1fr 1fr; padding: 20px; gap: 12px; border-bottom: 1px solid var(--ui-line); }
   .accounts-table tr:last-child { border-bottom: 0; }
   .accounts-table td { border: 0; padding: 0; }
   .accounts-table .account-cell { width: auto; min-width: 0; grid-column: 1 / -1; }

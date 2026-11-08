@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import re
 import sqlite3
 import stat
 import threading
@@ -74,10 +75,12 @@ def test_cli_status_reports_destination_scoped_pending_data_without_writes(clien
     monkeypatch.setattr("sys.argv", ["tracknest", "status"])
     assert module.main() == (0 if connected else 1)
     output = capsys.readouterr().out
-    assert "pending 2 metrics, 0 system records, 0 traces, 1 files" in output
+    assert [line.split() for line in output.splitlines() if line.strip().startswith("buffered-project")] == [
+        ["buffered-project", "2", "0", "0", "1"]]
+    assert "Pending uploads" in output and "Metrics" in output and "Total" in output
     assert "exclude in-memory uploads" in output
     assert "private-token" not in output
-    assert ("Authentication: verified" in output) == connected
+    assert bool(re.search(r"Authentication:\s+verified", output)) == connected
     assert database.read_bytes() == before
     assert set(cache.iterdir()) == {database}
     verify.assert_called_once_with(config["server_url"], config["token"])
@@ -90,6 +93,78 @@ def test_cli_without_configuration_exits_with_login_instructions(client_module, 
     assert "tracknest login" in output and "Traceback" not in output
 
 
+@pytest.mark.parametrize("action,running", [("start", True), ("stop", False)])
+def test_cli_manages_configured_instance(client_module, monkeypatch, capsys, action, running):
+    module = client_module
+    config = {"server_url": "http://localhost:9000/u/alice/", "token": "private-token"}
+    monkeypatch.setattr(module, "_read_config", lambda: config)
+    response = Mock(status_code=200)
+    response.json.return_value = {"instance_running": running}
+    manage = Mock(return_value=response)
+    monkeypatch.setattr(module.httpx2, "post", manage)
+    monkeypatch.setenv("ALL_PROXY", "socks://127.0.0.1:29674/")
+    monkeypatch.setattr("sys.argv", ["tracknest", action])
+    before = dict(os.environ)
+    assert module.main() == 0
+    manage.assert_called_once_with("http://localhost:9000/u/alice/__tracknest/instance",
+                                   headers={"X-Trackio-Write-Token": "private-token"},
+                                   json={"action": action}, trust_env=False, timeout=60)
+    output = capsys.readouterr().out
+    assert ("Instance: running." if running else "Instance: stopped.") in output
+    assert "private-token" not in output
+    assert dict(os.environ) == before
+
+
+@pytest.mark.parametrize("status,state", [(503, {}), (200, {"instance_running": False})])
+def test_cli_start_failure_does_not_report_success(client_module, monkeypatch, capsys, status, state):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    response = Mock(status_code=status)
+    response.json.return_value = state
+    monkeypatch.setattr(module.httpx2, "post", Mock(return_value=response))
+    monkeypatch.setattr("sys.argv", ["tracknest", "start"])
+    assert module.main() == 1
+    assert "Instance: running." not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("running", [False, True])
+def test_training_starts_stopped_instance_before_connecting(client_module, monkeypatch, running):
+    module = client_module
+    config = {"server_url": "http://localhost/u/alice/", "token": "secret"}
+    monkeypatch.setattr(module, "_read_config", lambda: config)
+    events = Mock()
+    events.verify.return_value = {"authenticated": True, "instance_running": running}
+    monkeypatch.setattr(module, "_verify_credentials", events.verify)
+    monkeypatch.setattr(module, "_manage_instance", events.manage)
+    monkeypatch.setattr(module, "_DirectClient", events.remote)
+    monkeypatch.setattr(module._sdk, "RemoteClient", module._sdk.RemoteClient)
+    run_module = module.importlib.import_module("trackio.run")
+    monkeypatch.setattr(run_module, "RemoteClient", run_module.RemoteClient)
+    assert module._connect() == config
+    assert [call[0] for call in events.mock_calls] == (["verify", "remote"] if running else ["verify", "manage", "remote"])
+    if not running:
+        events.manage.assert_called_once_with(config, "start")
+
+
+@pytest.mark.parametrize("failure", ["auth", "start"])
+def test_training_auth_or_start_failure_prevents_sdk_initialization(client_module, monkeypatch, failure):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    verify = Mock(return_value={"authenticated": True, "instance_running": False},
+                  side_effect=RuntimeError("invalid token") if failure == "auth" else None)
+    manage = Mock(side_effect=RuntimeError("start failed"))
+    remote, init = Mock(), Mock()
+    monkeypatch.setattr(module, "_verify_credentials", verify)
+    monkeypatch.setattr(module, "_manage_instance", manage)
+    monkeypatch.setattr(module, "_DirectClient", remote)
+    monkeypatch.setattr(module._sdk, "init", init)
+    with pytest.raises(RuntimeError, match="invalid token" if failure == "auth" else "start failed"):
+        module.init(project="experiment")
+    assert manage.call_count == (0 if failure == "auth" else 1)
+    remote.assert_not_called()
+    init.assert_not_called()
+
+
 def test_cli_status_does_not_claim_empty_cache_when_a_database_is_unreadable(client_module, monkeypatch, tmp_path, capsys):
     module = client_module
     monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
@@ -100,16 +175,17 @@ def test_cli_status_does_not_claim_empty_cache_when_a_database_is_unreadable(cli
     assert module.main() == 1
     output = capsys.readouterr().out
     assert "Cannot inspect broken.db" in output
-    assert "cache is empty" not in output
+    assert "No pending uploads" not in output
 
 
 @pytest.mark.parametrize("command,expected,api", [
     (["projects"], "experiment", "/get_all_projects"),
-    (["runs", "experiment"], "baseline  id=run-1", "/get_runs_for_project"),
+    (["runs", "experiment"], "baseline  run-1", "/get_runs_for_project"),
 ])
 def test_cli_remote_queries_do_not_modify_proxy_environment(client_module, monkeypatch, capsys, command, expected, api):
     module = client_module
     monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": True})
     client = Mock()
     client.predict.return_value = ["experiment"] if command[0] == "projects" else [
         {"name": "baseline", "id": "run-1", "created_at": "2026-11-07T12:00:00Z"}]
@@ -123,6 +199,136 @@ def test_cli_remote_queries_do_not_modify_proxy_environment(client_module, monke
     assert client.predict.call_args.kwargs["api_name"] == api
     assert remote.call_args.kwargs["httpx_kwargs"] == {"trust_env": False}
     assert dict(os.environ) == before
+
+
+@pytest.mark.parametrize("command", [["projects"], ["runs", "experiment"]])
+@pytest.mark.parametrize("language", ["en", "zh"])
+def test_queries_on_stopped_instance_explain_how_to_start_without_contacting_sdk(client_module, monkeypatch, capsys, command, language):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": False})
+    remote, manage = Mock(), Mock()
+    monkeypatch.setattr(module, "_RemoteClient", remote)
+    monkeypatch.setattr(module, "_manage_instance", manage)
+    monkeypatch.setattr("sys.argv", ["tracknest", *command, "--lang", language])
+    assert module.main() == 1
+    output = capsys.readouterr().out
+    assert ("Instance is stopped" if language == "en" else "实例尚未启动") in output
+    assert "tracknest start" in output
+    assert "Space" not in output and "503" not in output and "developer.mozilla.org" not in output
+    remote.assert_not_called()
+    manage.assert_not_called()
+
+
+@pytest.mark.parametrize("action,expected", [("start", "实例：运行中"), ("stop", "实例：已停止")])
+@pytest.mark.parametrize("before", [False, True])
+def test_chinese_language_option_works_before_and_after_subcommands(client_module, monkeypatch, capsys, action, expected, before):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    monkeypatch.setattr(module, "_manage_instance", Mock())
+    monkeypatch.setattr("sys.argv", ["tracknest", *(["--lang", "zh", action] if before else [action, "--lang", "zh"])])
+    assert module.main() == 0
+    output = capsys.readouterr().out
+    assert expected in output and "Instance:" not in output
+
+
+@pytest.mark.parametrize("language", ["en", "zh"])
+def test_status_groups_pending_projects_and_totals_without_repeated_prefixes(client_module, monkeypatch, tmp_path, capsys, language):
+    module = client_module
+    config = {"server_url": "http://localhost/u/alice/", "token": "private-token"}
+    monkeypatch.setattr(module, "_read_config", lambda: config)
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": False})
+    monkeypatch.setattr(module.SQLiteStorage, "get_project_db_path", lambda project: tmp_path / f"{project}.db")
+    for name, metrics, system in (("my-project-test", 100, 4), ("my-project-test1", 25, 1), ("实验项目", 100, 4)):
+        with sqlite3.connect(tmp_path / f"{name}.db") as database:
+            for table, count in (("metrics", metrics), ("system_metrics", system)):
+                database.execute(f"CREATE TABLE {table} (space_id TEXT)")
+                database.executemany(f"INSERT INTO {table} VALUES (?)", [(config["server_url"],)] * count)
+    before = {path: path.read_bytes() for path in tmp_path.glob("*.db")}
+    monkeypatch.setattr("sys.argv", ["tracknest", "status", "--lang", language])
+    assert module.main() == 1
+    output = capsys.readouterr().out
+    assert output.count("tracknest:") == 1
+    assert "tracknest start" in output and "private-token" not in output
+    label = "Total" if language == "en" else "合计"
+    assert [line.split() for line in output.splitlines() if line.strip().startswith(label)] == [[label, "225", "9", "0", "0"]]
+    assert ("Pending uploads" if language == "en" else "待上传缓存") in output
+    assert ("Counts exclude in-memory" if language == "en" else "统计不包含仍在训练进程内存中") in output
+    assert before == {path: path.read_bytes() for path in before}
+
+
+@pytest.mark.parametrize("language", ["en", "zh"])
+@pytest.mark.parametrize("code", [403, 503])
+def test_cli_explains_wrapped_sdk_http_errors(client_module, monkeypatch, capsys, language, code):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "private-token"})
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": True})
+    request = module.httpx2.Request("GET", "http://localhost/u/alice/version")
+    response = module.httpx2.Response(code, request=request)
+    wrapped = ConnectionError("Could not connect to Space. https://developer.mozilla.org/HTTP")
+    wrapped.__cause__ = module.httpx2.HTTPStatusError("server error", request=request, response=response)
+    monkeypatch.setattr(module, "_RemoteClient", Mock(side_effect=wrapped))
+    monkeypatch.setattr("sys.argv", ["tracknest", "projects", "--lang", language])
+    assert module.main() == 1
+    output = capsys.readouterr().out
+    expected = ("Access denied" if language == "en" else "访问被拒绝") if code == 403 else "tracknest start"
+    assert expected in output
+    assert "Space" not in output and "developer.mozilla.org" not in output and "private-token" not in output
+
+
+@pytest.mark.parametrize("language", ["en", "zh"])
+def test_cli_localizes_network_errors_with_low_level_causes(client_module, monkeypatch, capsys, language):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    error = module.httpx2.ConnectError("connection refused")
+    error.__cause__ = RuntimeError("low-level socket error")
+    monkeypatch.setattr(module, "_verify_credentials", Mock(side_effect=error))
+    remote = Mock()
+    monkeypatch.setattr(module, "_RemoteClient", remote)
+    monkeypatch.setattr("sys.argv", ["tracknest", "projects", "--lang", language])
+    assert module.main() == 1
+    output = capsys.readouterr().out
+    assert ("Cannot reach TrackNest" if language == "en" else "无法连接 TrackNest") in output
+    assert "socket error" not in output and "connection refused" not in output
+    remote.assert_not_called()
+
+
+def test_chinese_login_saves_config_without_printing_token(client_module, monkeypatch, capsys):
+    module = client_module
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": False})
+    monkeypatch.setattr(module.getpass, "getpass", lambda prompt: "private-token")
+    monkeypatch.setattr("sys.argv", ["tracknest", "login", "--server-url", "http://localhost/u/alice/", "--lang", "zh"])
+    assert module.main() == 0
+    output = capsys.readouterr().out
+    assert "登录成功" in output and "实例：已停止" in output and "private-token" not in output
+    assert json.loads(module._config_path().read_text())["token"] == "private-token"
+
+
+@pytest.mark.parametrize("args", [["--lang", "zh", "--help"], ["status", "--lang", "zh", "--help"]])
+def test_chinese_help_does_not_require_login(client_module, monkeypatch, capsys, args):
+    monkeypatch.setattr("sys.argv", ["tracknest", *args])
+    with pytest.raises(SystemExit) as result:
+        client_module.main()
+    assert result.value.code == 0
+    assert "输出语言" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("args,chinese", [
+    (["runs"], False),
+    (["runs", "--lang", "zh"], True),
+    (["--lang", "zh", "runs"], True),
+])
+def test_runs_without_project_shows_actionable_guidance(client_module, monkeypatch, capsys, args, chinese):
+    config = Mock(side_effect=AssertionError("Missing arguments must not read connection settings"))
+    monkeypatch.setattr(client_module, "_read_config", config)
+    monkeypatch.setattr("sys.argv", ["tracknest", *args])
+    assert client_module.main() == 2
+    captured = capsys.readouterr()
+    assert ("请指定项目名称" if chinese else "Specify a project name") in captured.out
+    assert "tracknest runs my-project" in captured.out
+    assert "tracknest projects" in captured.out
+    assert "usage:" not in captured.out and not captured.err
+    config.assert_not_called()
 
 
 def test_only_tracknest_connection_bypasses_proxy(client_module, monkeypatch):
@@ -169,6 +375,91 @@ def test_failed_batch_does_not_report_upload_success(client_module, capsys):
             client.predict(api_name="/bulk_log", logs=[{"project": "experiment"}])
     assert not module._uploaded
     assert "Upload failed" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("tty,no_color,colored", [(True, False, True), (False, False, False), (True, True, False)])
+@pytest.mark.parametrize("running,english,chinese,color", [
+    (True, "running", "运行中", "32"),
+    (False, "stopped", "已停止", "31"),
+    (None, "unknown", "未知", "31"),
+])
+@pytest.mark.parametrize("language", ["en", "zh"])
+def test_instance_status_colors(client_module, monkeypatch, capsys, tty, no_color, colored,
+                                running, english, chinese, color, language):
+    module = client_module
+    monkeypatch.setattr(module.sys.stdout, "isatty", lambda: tty)
+    if no_color:
+        monkeypatch.setenv("NO_COLOR", "1")
+    else:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    monkeypatch.setattr(module, "_verify_credentials", Mock(
+        return_value={"authenticated": True, "instance_running": running},
+        side_effect=ConnectionError("unreachable") if running is None else None))
+    monkeypatch.setattr(module, "_pending_status", lambda server_url: True)
+    monkeypatch.setattr("sys.argv", ["tracknest", "status", "--lang", language])
+    assert module.main() == (0 if running else 1)
+    output = capsys.readouterr().out
+    label, value = ("Instance", english) if language == "en" else ("实例", chinese)
+    line = next(line for line in output.splitlines() if re.sub(r"\033\[[0-9;]*m", "", line).strip().startswith(label + ":"))
+    assert line.endswith(f"\033[{color}m{value}\033[0m" if colored else value)
+    assert re.sub(r"\033\[[0-9;]*m", "", line) == f"  {label}:{' ' * (8 if language == 'en' else 6)}{value}"
+    authentication = ("verified" if running is not None else "unavailable") if language == "en" else ("已验证" if running is not None else "未能验证")
+    authentication_color = "32" if running is not None else "31"
+    assert (f"\033[{authentication_color}m{authentication}\033[0m" if colored else authentication) in output
+    if not colored:
+        assert "\033[" not in output
+
+
+@pytest.mark.parametrize("tty,no_color,colored", [(True, False, True), (False, False, False), (True, True, False)])
+@pytest.mark.parametrize("language", ["en", "zh"])
+@pytest.mark.parametrize("command,expected", [
+    (["status"], 0), (["projects"], 0), (["runs", "experiment"], 0), (["runs"], 2),
+    (["start"], 0), (["stop"], 0), (["login", "--server-url", "http://localhost/u/alice/"], 0),
+    (["--help"], 0), (["runs", "--help"], 0), (["--version"], 0), (["--unknown"], 2),
+])
+def test_cli_colors_all_text_without_changing_layout(client_module, monkeypatch, tmp_path, capsys,
+                                                     tty, no_color, colored, language, command, expected):
+    module = client_module
+    monkeypatch.setattr(module.sys.stdout, "isatty", lambda: tty)
+    monkeypatch.setattr(module.sys.stderr, "isatty", lambda: tty)
+    if no_color:
+        monkeypatch.setenv("NO_COLOR", "1")
+    else:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+    url = "http://localhost/u/alice/"
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": url, "token": "private-token"})
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": True})
+    monkeypatch.setattr(module, "_manage_instance", Mock())
+    monkeypatch.setattr(module.getpass, "getpass", lambda prompt: "private-token")
+    remote = Mock()
+    remote.predict.return_value = ["experiment"] if command[0] == "projects" else [
+        {"name": "baseline", "id": "run-1", "created_at": "2026-11-07T12:00:00Z"}]
+    monkeypatch.setattr(module, "_RemoteClient", lambda *args, **kwargs: remote)
+    monkeypatch.setattr(module.SQLiteStorage, "get_project_db_path", lambda project: tmp_path / f"{project}.db")
+    with sqlite3.connect(tmp_path / "experiment.db") as database:
+        database.execute("CREATE TABLE metrics (space_id TEXT)")
+        database.execute("INSERT INTO metrics VALUES (?)", (url,))
+    monkeypatch.setattr("sys.argv", ["tracknest", "--lang", language, *command])
+    try:
+        code = module.main()
+    except SystemExit as result:
+        code = result.code
+    assert code == expected
+    captured = capsys.readouterr()
+    for output in (captured.out, captured.err):
+        assert "private-token" not in output
+        if colored:
+            active = False
+            for part in re.split(r"(\033\[[0-9;]*m)", output):
+                if part.startswith("\033["):
+                    active = part != "\033[0m"
+                elif part.strip():
+                    assert active, f"Uncolored text: {part!r}"
+        else:
+            assert "\033[" not in output
+    plain = re.sub(r"\033\[[0-9;]*m", "", captured.out)
+    assert plain.startswith("\n") and plain.endswith("\n\n" if not captured.err else "\n")
 
 
 @pytest.mark.parametrize("tty,no_color,colored", [(True, False, True), (False, False, False), (True, True, False)])

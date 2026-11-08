@@ -55,4 +55,10 @@ def check_wheel_install(public, tmp_path):
     result = subprocess.run([str(target / "bin/tracknest"), "--help"], cwd=tmp_path,
                             env={**os.environ, "PYTHONPATH": str(target)}, capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
-    assert "status" in result.stdout and "projects" in result.stdout and "runs" in result.stdout
+    assert all(command in result.stdout for command in ("status", "start", "stop", "projects", "runs"))
+    result = subprocess.run([str(target / "bin/tracknest"), "--version"], cwd=tmp_path,
+                            env={**os.environ, "PYTHONPATH": str(target)}, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and CLIENT_WHEEL_NAME.split("-")[1] in result.stdout
+    result = subprocess.run([str(target / "bin/tracknest"), "--lang", "zh", "--help"], cwd=tmp_path,
+                            env={**os.environ, "PYTHONPATH": str(target)}, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and "输出语言" in result.stdout and "启动当前实例" in result.stdout

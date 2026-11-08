@@ -1,0 +1,34 @@
+{% set team_space = membership is defined %}
+<div class="ui-panel-body ui-stack">
+    {% if team_space and membership.role == 'viewer' %}<p class="ui-hint">{{ t('你在本项目只有只读权限，可读取实验，不能上报训练或修改数据。', 'You have viewer access to this project: you can read experiments but cannot log training or change data.') }}</p>{% endif %}
+    {% include 'client_install.html' %}
+    <div class="connection-step ui-stack"><h3 class="step-heading"><span class="step-number" aria-hidden="true">2</span>{{ t('连接工作空间', 'Connect your workspace') }}</h3>
+        <pre class="ui-code"><code>tracknest login --server-url "{{ request.host_url.rstrip('/') }}{{ connection_backend.backend_path }}/"</code></pre>
+        <p class="ui-hint">{{ t('按提示输入账号 Token，登录一次即可保存连接。使用 SSH 隧道时请保持连接。', 'Enter your account token when prompted. Login saves the connection. Keep your SSH tunnel connected if used.') }}</p>
+        <details class="ui-disclosure token-disclosure"><summary>{{ t('查看账号 Token', 'View account token') }}</summary><div class="ui-disclosure-body ui-stack">
+            <pre class="ui-code"><code>{{ g.user.write_token }}</code></pre>
+            {% if team_space %}
+            <form action="{{ url_for('rotate_project_token', project_id=connection_backend.id) }}" method="post" data-confirm="{{ t('这会重置账号的唯一 Token，个人空间和所有团队项目的旧凭据立即失效。继续？', 'Reset your account token? Old credentials for your personal space and all team projects will stop working immediately.') }}" onsubmit="return confirm(this.dataset.confirm)">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="ui-button ui-button--secondary" type="submit">{{ t('重置我的账号 Token', 'Reset my account token') }}</button>
+            </form>
+            {% endif %}
+        </div></details>
+    </div>
+    {% if not team_space or membership.role != 'viewer' %}
+    <details class="ui-disclosure connection-step"><summary><span class="step-number" aria-hidden="true">3</span>{{ t('开始记录训练', 'Log your training') }}</summary><div class="ui-disclosure-body">
+        <pre class="ui-code"><code>import tracknest as trackio
+
+trackio.init(project="{{ training_project }}", name="baseline")
+for iteration in range(1, 26):
+    trackio.log({
+        "iteration": iteration,
+        "loss": 1.0 / iteration,
+        "accuracy": 1.0 - 1.0 / (iteration + 1),
+    }, step=iteration)
+trackio.finish()</code></pre>
+    </div></details>
+    {% endif %}
+    {% include 'client_cli.html' %}
+    <p class="credential-note ui-hint">{{ t('一个账号一个 Token，个人空间与全部团队项目共用；访问范围由项目成员权限决定。请勿分享账号 Token。', 'One account token works across your personal space and all team projects. Membership determines access. Keep your account token private.') if team_space else t('Token 可读写你空间内的全部实验，请妥善保管。', 'Your token grants read and write access to all your experiments. Keep it private.') }}</p>
+</div>
