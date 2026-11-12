@@ -219,6 +219,22 @@ def _manage_instance(config, action):
     return state
 
 
+def _project_config(config, selector):
+    response = httpx2.get(urljoin(config["server_url"], "/__tracknest/projects"),
+                         headers={"X-Trackio-Write-Token": config["token"]}, trust_env=False, timeout=10)
+    response.raise_for_status()
+    projects = response.json()["projects"]
+    matches = [project for project in projects if project["id"] == selector] or [project for project in projects if project["name"] == selector]
+    if not matches:
+        raise RuntimeError(_text(f"Team project '{selector}' not found or you do not have access. Check its name or ID in the web panel.",
+                                 f"找不到团队项目“{selector}”或你没有访问权限，请在网页确认项目名称或 ID。"))
+    if len(matches) > 1:
+        choices = ", ".join(f"{project['owner']}: {project['id']}" for project in matches)
+        raise RuntimeError(_text(f"Multiple team projects named '{selector}'. Use --project <ID>: {choices}",
+                                 f"存在多个同名团队项目“{selector}”，请使用 --project <ID>：{choices}"))
+    return {**config, "server_url": urljoin(config["server_url"], f"/p/{matches[0]['id']}/")}
+
+
 def _login(args, parser):
     url = urlsplit(args.server_url)
     if url.scheme not in ("http", "https") or not url.netloc or url.query or url.fragment or url.username:
@@ -298,6 +314,9 @@ def _main():
     commands.add_parser("status", help=_text("Check connection and local pending data", "查看连接、实例状态和待上传缓存"))
     commands.add_parser("start", help=_text("Start the configured instance and wait until ready", "启动当前实例并等待就绪"))
     commands.add_parser("stop", help=_text("Stop the configured instance (affects all its training runs)", "停止当前实例，影响该实例的所有训练上报"))
+    for name in ("status", "start", "stop"):
+        commands.choices[name].add_argument("--project", metavar="NAME_OR_ID",
+                                           help=_text("Target a team project by name or ID without changing login", "通过名称或 ID 选择团队项目实例，不修改登录配置"))
     commands.add_parser("projects", help=_text("List remote projects", "列出远端项目"))
     runs = commands.add_parser("runs", help=_text("List runs in a remote project", "查看指定项目的训练记录"))
     runs.add_argument("project", nargs="?", help=_text("Project name (required)", "项目名称（必填）"))
@@ -314,6 +333,8 @@ def _main():
             _login(args, parser)
             return 0
         config = _read_config()
+        if args.command in ("status", "start", "stop") and args.project is not None:
+            config = _project_config(config, args.project)
         if args.command in ("start", "stop"):
             _status(_text(f"Instance: requesting {args.command} at {config['server_url']}...",
                           f"正在{'启动' if args.command == 'start' else '停止'}实例：{config['server_url']} ..."))
@@ -341,7 +362,8 @@ def _main():
                 print()
                 _status(error, "error")
             elif not state["instance_running"]:
-                _print("\n  " + _text("Start the instance: tracknest start", "启动实例：tracknest start --lang zh"), "warning")
+                start = "tracknest start" + (f" --project {args.project}" if args.project is not None else "")
+                _print("\n  " + _text(f"Start the instance: {start}", f"启动实例：{start} --lang zh"), "warning")
             readable = _pending_status(config["server_url"])
             return 0 if state and state["instance_running"] and readable else 1
         state = _verify_credentials(config["server_url"], config["token"])

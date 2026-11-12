@@ -174,6 +174,36 @@ def test_client_team_instance_permissions(users, project, role, action, allowed)
             stop.assert_not_called()
 
 
+@pytest.mark.parametrize("role", ["owner", "editor", "viewer", None])
+def test_client_project_listing_is_account_scoped_and_independent_of_instances(users, project, role):
+    actor = users["alice" if role == "owner" else "bob"]
+    if role in ("editor", "viewer"):
+        db.session.add(ProjectMember(project=project, user_id=actor.id, role=role))
+        db.session.commit()
+    with patch("app.is_running", return_value=False), patch("app.start_trackio") as start:
+        response = app.test_client().get("/__tracknest/projects", headers={"X-Trackio-Write-Token": actor.write_token})
+        assert response.status_code == 200
+        assert response.json == {"projects": [{"id": project.id, "name": project.name, "owner": "alice"}] if role else []}
+        assert all(user.write_token.encode() not in response.data for user in users.values())
+        assert project.write_token.encode() not in response.data
+        start.assert_not_called()
+    if role in ("editor", "viewer"):
+        db.session.delete(db.session.get(ProjectMember, (project.id, actor.id)))
+        db.session.commit()
+        assert app.test_client().get("/__tracknest/projects", headers={"X-Trackio-Write-Token": actor.write_token}).json == {"projects": []}
+
+
+def test_client_project_listing_requires_current_account_token(users, project):
+    client = owner_client()
+    assert client.get("/__tracknest/projects").status_code == 401
+    for token in ("invalid", project.write_token):
+        assert client.get("/__tracknest/projects", headers={"X-Trackio-Write-Token": token}).status_code == 403
+    old_token = users["alice"].write_token
+    users["alice"].write_token = "new-account-token"
+    db.session.commit()
+    assert client.get("/__tracknest/projects", headers={"X-Trackio-Write-Token": old_token}).status_code == 403
+
+
 def test_client_team_instance_rejects_revoked_and_backend_tokens(users, project):
     path = f"/p/{project.id}/__tracknest/instance"
     db.session.add(ProjectMember(project=project, user_id=users["bob"].id, role="editor"))

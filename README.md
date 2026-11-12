@@ -68,8 +68,8 @@ Keep the tunnel running on the training machine, for example `ssh -N -L 9000:loc
 Keep the SSH tunnel connected, download the client wheel from the server into any directory, then install and configure it once with your training Python. Replace the host for direct server access. For team spaces, use the `/p/<project-id>/` URL shown on the project page:
 
 ```bash
-curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.6-py3-none-any.whl
-python -m pip install --upgrade ./tracknest_client-0.1.6-py3-none-any.whl
+curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.7-py3-none-any.whl
+python -m pip install --upgrade ./tracknest_client-0.1.7-py3-none-any.whl
 tracknest login --server-url http://localhost:9000/u/<username>/
 ```
 
@@ -100,13 +100,23 @@ tracknest --version               # Installed client version
 tracknest --help
 ```
 
+To manage a team project while keeping your saved personal or team training connection, pass its name or ID:
+
+```bash
+tracknest status --project team-baseline
+tracknest start --project team-baseline
+tracknest stop --project team-baseline  # Pause the instance and retain its data; owner only
+```
+
+`--project` selects a managed team instance for `status`, `start`, and `stop`; it does not change the login configuration or the experiment name passed to training `init()`. The saved account token determines access. Project selection works while instances are stopped. If multiple accessible projects have the same name, the CLI lists their owners and IDs; use `--project <ID>`. Without this option, commands still use the saved login URL. These commands require the updated server and client.
+
 The same commands work with `python -m tracknest`, for example `python -m tracknest status`, to select a specific Python environment. Queries are read-only, preserve training proxies, and never display the token. `status` checks the cache for the configured server even while offline; counts exclude in-memory upload queues in active training processes. Missing configuration, connection/query failures, stopped instances in `status`, or unreadable cache databases return exit code 1. Successful queries return 0, with a warning if pending cache exists. `start` and `stop` manage the instance selected by the saved login URL; repeated requests are safe. Personal instances can be managed with their account token. Team owners and editors can start instances (including automatically during training); only owners can stop them, and viewers can only query state. Stop training uploads before running `stop`, since it affects every run using that instance. Instance management does not replay cached data; initializing the same project retries pending uploads. Update both the server and client to use these features.
 
 Terminal output is fully colored: verified credentials and running instances are green; stopped instances and unavailable authentication are red. Headings, labels, paths, tables, and hints also use colors. Redirected output and `NO_COLOR` remain plain text. Each command leaves one blank line before and after its output.
 
 CLI output defaults to English. Add `--lang zh` before or after any subcommand, such as `tracknest --lang zh projects` or `tracknest start --lang zh`. Status groups connection information and presents pending uploads in an aligned table with totals; projects and runs also use tables. Stopped instances produce a short `tracknest start` instruction before the SDK is contacted. HTTP and connection failures use concise messages instead of Space diagnostics and HTTP documentation links.
 
-Use `tracknest --version` to check the client installed in your training environment. If it still says to start instances from the web panel, upgrade to `0.1.6` using the wheel commands above with the same Python used for training. The server must be updated to provide the new wheel and instance-management API.
+Use `tracknest --version` to check the client installed in your training environment. If it still says to start instances from the web panel, upgrade to `0.1.7` using the wheel commands above with the same Python used for training. The server must be updated to provide the new wheel and instance-management API.
 
 ## Check status and logs
 

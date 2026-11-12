@@ -68,8 +68,8 @@ sudo nginx -t && sudo systemctl reload nginx
 保持 SSH 隧道连接，在任意目录下载服务器提供的客户端 wheel，使用训练 Python 安装并配置一次连接（直接访问服务器时替换域名；团队空间使用页面显示的 `/p/<项目ID>/` URL）：
 
 ```bash
-curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.6-py3-none-any.whl
-python -m pip install --upgrade ./tracknest_client-0.1.6-py3-none-any.whl
+curl --noproxy '*' -fLO http://localhost:9000/client/tracknest_client-0.1.7-py3-none-any.whl
+python -m pip install --upgrade ./tracknest_client-0.1.7-py3-none-any.whl
 tracknest login --server-url http://localhost:9000/u/<用户名>/
 ```
 
@@ -100,13 +100,23 @@ tracknest --version               # 查看已安装客户端版本
 tracknest --help
 ```
 
+保持已保存的个人或团队训练连接不变，也可通过团队项目名称或 ID 管理指定实例：
+
+```bash
+tracknest status --project team-baseline
+tracknest start --project team-baseline
+tracknest stop --project team-baseline  # 暂停实例并保留数据，仅所有者可执行
+```
+
+`--project` 用于 `status`、`start`、`stop` 选择团队项目实例，不修改登录配置，也不会改变训练 `init()` 中的实验项目名。访问权限由已保存的账号 Token 决定，实例未启动时也能选择。若多个可访问项目同名，CLI 会列出所有者和 ID，请使用 `--project <ID>`；不加该参数时仍操作已保存登录地址对应的实例。此功能需同时更新服务端和客户端。
+
 也支持 `python -m tracknest status` 等同名命令，以明确使用指定的 Python 环境。查询只读，继续保留训练代理，不显示 Token。`status` 即使无法连接服务器，也会检查当前服务器对应的本地缓存；缓存数量不包含仍在训练进程内存中的上传队列。配置缺失、连接或查询失败、`status` 中实例未运行、缓存无法完整读取时退出码为 1；正常查询为 0，存在待传缓存时显示提醒。`start` 和 `stop` 操作已保存登录 URL 对应的实例，可重复执行。个人实例使用本人的账号 Token 启停；团队实例允许所有者和编辑者启动（含训练自动启动），仅所有者可关闭，只读成员只能查询状态。执行 `stop` 前应暂停训练上报，因为它会影响使用该实例的所有 Run。启停命令不重传缓存，初始化同一 project 时会重试待传数据。使用新功能需同时更新服务端和客户端。
 
 终端输出统一配色：鉴权已验证、实例运行中为绿色；实例已停止、未能验证为红色。标题、字段名、路径、表格和提示也使用颜色；重定向输出或设置 `NO_COLOR` 时保留纯文本。每次命令输出前后各留一行空白。
 
 CLI 默认英文，在任意子命令前后加 `--lang zh` 可使用中文，例如 `tracknest --lang zh projects` 或 `tracknest start --lang zh`。状态页按组展示连接信息，并用对齐表格汇总待上传项目和数量；项目列表及 Run 列表也使用表格。实例停止时，查询会在连接 SDK 前提示先执行 `tracknest start`；HTTP 和连接失败使用简短说明，不再直接显示 Space 报错和 HTTP 文档链接。
 
-可用 `tracknest --version` 核对训练环境实际安装的版本。如果仍提示从网页启动实例，请使用上面的 wheel 安装命令，使用训练所用的同一个 Python 升级到 `0.1.6`。服务端也需更新，以提供新版 wheel 和实例管理接口。
+可用 `tracknest --version` 核对训练环境实际安装的版本。如果仍提示从网页启动实例，请使用上面的 wheel 安装命令，使用训练所用的同一个 Python 升级到 `0.1.7`。服务端也需更新，以提供新版 wheel 和实例管理接口。
 
 ## 查看状态和日志
 

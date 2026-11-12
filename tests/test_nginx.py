@@ -296,6 +296,27 @@ def check_shared_project(public, users, tmp_path):
         assert "private-project" not in shared.predict(api_name="/get_all_projects")
         personal = RemoteClient(public + "/u/alice/", write_token=users["alice"].write_token)
         assert "shared-training" not in personal.predict(api_name="/get_all_projects")
+        owner_env = training_environment(public + "/u/alice/", alice_token, tmp_path)
+        editor_env = training_environment(public + "/u/bob/", bob_token, tmp_path)
+
+        def instance_cli(command, environment, selector="shared-training"):
+            config = Path(environment["XDG_CONFIG_HOME"]) / "tracknest/client.json"
+            before = config.read_bytes()
+            result = subprocess.run([sys.executable, "-m", "tracknest", command, "--project", selector],
+                                    env=environment, capture_output=True, text=True, timeout=45)
+            assert config.read_bytes() == before
+            return result
+
+        result = instance_cli("stop", owner_env, project_id)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert requests.get(backend + "__tracknest/auth", headers={"X-Trackio-Write-Token": alice_token}, timeout=5).json()["instance_running"] is False
+        assert requests.get(public + "/u/alice/__tracknest/auth", headers={"X-Trackio-Write-Token": alice_token}, timeout=5).json()["instance_running"] is True
+        result = instance_cli("status", owner_env)
+        assert result.returncode == 1 and "tracknest start --project shared-training" in result.stdout
+        result = instance_cli("start", editor_env)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert instance_cli("stop", editor_env).returncode == 1
+        assert instance_cli("status", editor_env).returncode == 0
         sign_in(editor, "bob")
         assert editor.get(backend, timeout=5).status_code == 200
         upload = requests.post(backend + "api/upload", headers={"X-Trackio-Write-Token": bob_token},
@@ -304,6 +325,9 @@ def check_shared_project(public, users, tmp_path):
         owner.post(public + path + "/members", data={
             "csrf_token": csrf(owner, path), "username": "bob", "role": "viewer",
         }, timeout=5).raise_for_status()
+        assert instance_cli("status", editor_env).returncode == 0
+        assert instance_cli("start", editor_env).returncode == 1
+        assert instance_cli("stop", editor_env).returncode == 1
         assert shared.predict("shared-training", "alice-run", api_name="/get_logs")[0]["loss"] == 1.0
         assert shared.predict(api_name="/get_run_mutation_status")["allowed"] is False
         logo = shared.predict(api_name="/get_settings")["logo_urls"]["light"]

@@ -127,6 +127,85 @@ def test_cli_start_failure_does_not_report_success(client_module, monkeypatch, c
     assert "Instance: running." not in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("command", ["start", "stop", "status"])
+@pytest.mark.parametrize("by_id", [False, True])
+@pytest.mark.parametrize("language", ["en", "zh"])
+@pytest.mark.parametrize("saved_backend", ["/u/alice/", "/p/" + "c" * 32 + "/"])
+def test_cli_targets_team_instance_without_changing_saved_connection(client_module, monkeypatch, tmp_path, capsys,
+                                                                     command, by_id, language, saved_backend):
+    module = client_module
+    project_id = "a" * 32
+    config = {"server_url": "http://localhost:9000" + saved_backend, "token": "private-token"}
+    path = module._config_path()
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(config))
+    before = path.read_bytes()
+    listing = Mock()
+    listing.json.return_value = {"projects": [{"id": project_id, "name": "team-baseline", "owner": "alice"}]}
+    get = Mock(return_value=listing)
+    monkeypatch.setattr(module.httpx2, "get", get)
+    response = Mock(status_code=200)
+    response.json.return_value = {"instance_running": command != "stop"}
+    post = Mock(return_value=response)
+    monkeypatch.setattr(module.httpx2, "post", post)
+    verify = Mock(return_value={"authenticated": True, "instance_running": True})
+    monkeypatch.setattr(module, "_verify_credentials", verify)
+    pending = Mock(return_value=True)
+    monkeypatch.setattr(module, "_pending_status", pending)
+    monkeypatch.setattr("sys.argv", ["tracknest", command, "--project", project_id if by_id else "team-baseline", "--lang", language])
+    assert module.main() == 0
+    target = f"http://localhost:9000/p/{project_id}/"
+    get.assert_called_once_with("http://localhost:9000/__tracknest/projects",
+                                headers={"X-Trackio-Write-Token": "private-token"}, trust_env=False, timeout=10)
+    if command == "status":
+        verify.assert_called_once_with(target, "private-token")
+        pending.assert_called_once_with(target)
+        post.assert_not_called()
+    else:
+        post.assert_called_once_with(target + "__tracknest/instance", json={"action": command},
+                                     headers={"X-Trackio-Write-Token": "private-token"}, trust_env=False, timeout=60)
+    output = capsys.readouterr().out
+    assert target in output and "private-token" not in output
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("projects,expected", [
+    ([], "not found or you do not have access"),
+    ([{"id": "a" * 32, "name": "same", "owner": "alice"},
+      {"id": "b" * 32, "name": "same", "owner": "bob"}], "Use --project <ID>"),
+])
+def test_cli_rejects_missing_or_ambiguous_team_project_before_mutating(client_module, monkeypatch, capsys, projects, expected):
+    module = client_module
+    config = {"server_url": "http://localhost/p/" + "c" * 32 + "/", "token": "private-token"}
+    monkeypatch.setattr(module, "_read_config", lambda: config)
+    response = Mock()
+    response.json.return_value = {"projects": projects}
+    monkeypatch.setattr(module.httpx2, "get", Mock(return_value=response))
+    manage = Mock()
+    monkeypatch.setattr(module, "_manage_instance", manage)
+    monkeypatch.setattr("sys.argv", ["tracknest", "stop", "--project", "same"])
+    assert module.main() == 1
+    output = capsys.readouterr().out
+    assert expected in output
+    if projects:
+        assert all(project["id"] in output for project in projects)
+    assert "private-token" not in output
+    manage.assert_not_called()
+
+
+def test_stopped_team_status_suggests_starting_the_same_project(client_module, monkeypatch, capsys):
+    module = client_module
+    monkeypatch.setattr(module, "_read_config", lambda: {"server_url": "http://localhost/u/alice/", "token": "secret"})
+    response = Mock()
+    response.json.return_value = {"projects": [{"id": "a" * 32, "name": "team-baseline", "owner": "alice"}]}
+    monkeypatch.setattr(module.httpx2, "get", Mock(return_value=response))
+    monkeypatch.setattr(module, "_verify_credentials", lambda *args: {"authenticated": True, "instance_running": False})
+    monkeypatch.setattr(module, "_pending_status", lambda url: True)
+    monkeypatch.setattr("sys.argv", ["tracknest", "status", "--project", "team-baseline", "--lang", "zh"])
+    assert module.main() == 1
+    assert "tracknest start --project team-baseline --lang zh" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("running", [False, True])
 def test_training_starts_stopped_instance_before_connecting(client_module, monkeypatch, running):
     module = client_module

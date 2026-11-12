@@ -303,7 +303,7 @@ def authenticate():
     if request.endpoint in ("proxy_personal", "proxy_project"):
         request.max_content_length = 100 * 1024 * 1024
         return
-    if request.endpoint in ("trackio_auth", "client_auth", "client_instance"):
+    if request.endpoint in ("trackio_auth", "client_auth", "client_instance", "client_projects"):
         return
     if request.method == "POST":
         supplied = request.form.get("csrf_token", "")
@@ -731,6 +731,19 @@ def shared_project_auth(path, method, expected_origin, *, require_running=True):
     if require_running and not is_running(project):
         abort(503, t("实验实例未运行，请返回项目管理页面启动实例", "The experiment instance is not running. Start it from the project management page"))
     return project, project.write_token if member.role != "viewer" else ""
+
+
+@app.get("/__tracknest/projects")
+def client_projects():
+    token = request.headers.get("X-Trackio-Write-Token")
+    if not token:
+        abort(401)
+    user = TrackioUser.query.filter_by(write_token=token).first()
+    if not user:
+        abort(403)
+    members = ProjectMember.query.filter_by(user_id=user.id).join(SharedProject).order_by(SharedProject.name, SharedProject.id).all()
+    return {"projects": [{"id": member.project_id, "name": member.project.name, "owner": member.project.owner.username}
+                         for member in members]}
 
 
 @app.get("/u/<username>/__tracknest/auth")

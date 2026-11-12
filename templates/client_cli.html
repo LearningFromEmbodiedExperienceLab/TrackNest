@@ -8,6 +8,10 @@ tracknest runs my-project  # {{ t('查看指定项目的 Run，替换为你的�
 tracknest status --lang zh # {{ t('中文状态输出，默认英文', 'Chinese output; English is the default') }}
 tracknest --version        # {{ t('查看已安装客户端版本', 'Show the installed client version') }}
 tracknest --help           # {{ t('查看帮助', 'Show help') }}</code></pre>
+    <p class="ui-hint">{{ t('无需重新登录，可通过团队项目名称或 ID 指定实例；同名项目请使用 ID。这不会改变已保存的训练连接。', 'Select a team instance by project name or ID without logging in again. Use the ID for duplicate names. Your saved training connection stays unchanged.') }}</p>
+    <pre class="ui-code"><code>tracknest status --project {{ connection_backend.id if team_space else 'team-project' }}
+tracknest start --project {{ connection_backend.id if team_space else 'team-project' }}
+tracknest stop --project {{ connection_backend.id if team_space else 'team-project' }}  # {{ t('暂停实例，保留数据；仅所有者可执行', 'Pause the instance, retaining data; owners only') }}</code></pre>
     <p class="ui-hint">{{ t('训练调用 init 时会自动启动已停止的实例并等待就绪，finish 不会关闭实例。login、status、projects、runs 不会启动实例或触发上传。团队实例允许所有者和编辑者启动，仅所有者可关闭。也可使用 python -m tracknest 执行相同命令。', 'Training init automatically starts a stopped instance and waits until ready; finish keeps it running. login, status, projects and runs do not start instances or trigger uploads. Team owners and editors can start an instance; only owners can stop it. You can also use python -m tracknest.') }}</p>
     <p class="ui-hint">{{ t('所有 CLI 命令默认英文，加 --lang zh 使用中文；参数可放在子命令前后。实例停止时，projects 和 runs 会提示先执行 tracknest start。', 'All CLI commands default to English; add --lang zh before or after the subcommand for Chinese. When the instance is stopped, projects and runs explain how to start it with tracknest start.') }}</p>
 </div></details>
