@@ -16,11 +16,7 @@ import time
 import unicodedata
 from urllib.parse import urlencode, urljoin, urlsplit
 
-import httpx2
-import trackio as _sdk
-from trackio.remote_client import RemoteClient as _RemoteClient
-from trackio.sqlite_storage import SQLiteStorage
-
+_sdk = None
 _server_url = None
 _uploaded = Counter()
 _last_report = {}
@@ -114,28 +110,46 @@ def _read_config():
     return json.loads(path.read_text())
 
 
-class _DirectClient(_RemoteClient):
-    def __init__(self, space, *args, **kwargs):
-        self._tracknest = space.rstrip("/") == (_server_url or "").rstrip("/")
-        if self._tracknest:
-            kwargs["httpx_kwargs"] = {**kwargs.get("httpx_kwargs", {}), "trust_env": False}
-        super().__init__(space, *args, **kwargs)
+def _load_sdk():
+    global _sdk, httpx2, _RemoteClient, SQLiteStorage, _DirectClient
+    if _sdk is not None:
+        return
+    try:
+        import trackio
+        import httpx2
+        from trackio.remote_client import RemoteClient as _RemoteClient
+        from trackio.sqlite_storage import SQLiteStorage
+    except ImportError as error:
+        raise RuntimeError(_text(
+            f"Trackio SDK is unavailable: {error}. TrackNest does not install dependencies automatically. "
+            "Provide a compatible Trackio SDK separately (tested with 0.45.0), then retry.",
+            f"Trackio SDK 不可用：{error}。TrackNest 不会自动安装依赖。"
+            "请单独准备与现有环境兼容的 Trackio SDK（已验证 0.45.0），然后重试。")) from error
 
-    def predict(self, *args, api_name, **kwargs):
-        try:
-            result = super().predict(*args, api_name=api_name, **kwargs)
-        except Exception as error:
-            if self._tracknest and api_name.startswith("/bulk_"):
-                _status(f"Upload failed; data will be buffered locally for retry: {error}", "error")
-            raise
-        if self._tracknest and api_name == "/bulk_log":
-            for project, count in Counter(row["project"] for row in kwargs.get("logs", [])).items():
-                _uploaded[project] += count
-                now = time.monotonic()
-                if now - _last_report.get(project, float("-inf")) >= 5:
-                    _status(f"{project}: uploaded {_uploaded[project]} metric records in this process")
-                    _last_report[project] = now
-        return result
+    class _DirectClient(_RemoteClient):
+        def __init__(self, space, *args, **kwargs):
+            self._tracknest = space.rstrip("/") == (_server_url or "").rstrip("/")
+            if self._tracknest:
+                kwargs["httpx_kwargs"] = {**kwargs.get("httpx_kwargs", {}), "trust_env": False}
+            super().__init__(space, *args, **kwargs)
+
+        def predict(self, *args, api_name, **kwargs):
+            try:
+                result = super().predict(*args, api_name=api_name, **kwargs)
+            except Exception as error:
+                if self._tracknest and api_name.startswith("/bulk_"):
+                    _status(f"Upload failed; data will be buffered locally for retry: {error}", "error")
+                raise
+            if self._tracknest and api_name == "/bulk_log":
+                for project, count in Counter(row["project"] for row in kwargs.get("logs", [])).items():
+                    _uploaded[project] += count
+                    now = time.monotonic()
+                    if now - _last_report.get(project, float("-inf")) >= 5:
+                        _status(f"{project}: uploaded {_uploaded[project]} metric records in this process")
+                        _last_report[project] = now
+            return result
+
+    _sdk = trackio
 
 
 def _connect():
@@ -156,6 +170,7 @@ def _connect():
 
 
 def init(*args, **kwargs):
+    _load_sdk()
     if kwargs.get("space_id") or os.environ.get("TRACKIO_SPACE_ID"):
         raise ValueError("TrackNest uses a self-hosted server; remove space_id / TRACKIO_SPACE_ID")
     if "server_url" in kwargs:
@@ -192,6 +207,9 @@ def init(*args, **kwargs):
 
 
 def __getattr__(name):
+    if name.startswith("__"):
+        raise AttributeError(name)
+    _load_sdk()
     return getattr(_sdk, name)
 
 
@@ -328,6 +346,11 @@ def _main():
         _print("\n  " + _text("Example:       tracknest runs my-project", "示例：    tracknest runs my-project --lang zh"))
         _print("  " + _text("List projects: tracknest projects", "查看项目：tracknest projects --lang zh"))
         return 2
+    try:
+        _load_sdk()
+    except RuntimeError as error:
+        _status(str(error), "error")
+        return 1
     try:
         if args.command == "login":
             _login(args, parser)

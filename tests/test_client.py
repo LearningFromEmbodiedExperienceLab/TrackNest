@@ -19,6 +19,7 @@ def client_module(monkeypatch, tmp_path):
     spec = importlib.util.spec_from_file_location("tracknest", BASE_DIR / "client/tracknest.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module._load_sdk()
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     monkeypatch.delenv("TRACKIO_SPACE_ID", raising=False)
     return module
